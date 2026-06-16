@@ -1,0 +1,130 @@
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--admin-color-sidebar) 48%, transparent);
+  backdrop-filter: blur(var(--space-1));
+
+  &__panel {
+    position: relative;
+    width: min(100%, var(--confirm-dialog-width));
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-lg);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface);
+    box-shadow: var(--shadow-admin);
+  }
+
+  &__close {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+    display: inline-grid;
+    place-items: center;
+    width: var(--space-8);
+    height: var(--space-8);
+    border: 0;
+    border-radius: var(--radius-pill);
+    color: var(--admin-color-text-muted);
+    background: transparent;
+
+    &:hover {
+      color: var(--admin-color-text);
+      background: var(--admin-color-surface-muted);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__icon {
+    display: inline-grid;
+    place-items: center;
+    width: var(--admin-icon-size);
+    height: var(--admin-icon-size);
+    border-radius: var(--radius-pill);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 9%, var(--admin-color-surface));
+  }
+
+  &__copy {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  &__title {
+    font-size: var(--text-xl);
+    line-height: var(--line-tight);
+  }
+
+  &__description {
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-sm);
+    line-height: var(--line-normal);
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  &__cancel,
+  &__confirm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--button-height);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
+    font-weight: 750;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__cancel {
+    border: var(--border-thin) solid var(--admin-color-border);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface);
+  }
+
+  &__confirm {
+    border: var(--border-thin) solid var(--color-danger);
+    color: var(--admin-color-sidebar-text);
+    background: var(--color-danger);
+  }
+
+  &__spinner {
+    animation: confirm-dialog-spin var(--duration-normal) linear infinite;
+  }
+}
+
+@keyframes confirm-dialog-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog__spinner {
+    animation: none;
+  }
+}

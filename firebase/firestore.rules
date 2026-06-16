@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformAdmin() {
+      return signedIn() && request.auth.token.platformAdmin == true;
+    }
+
+    function storePath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId);
+    }
+
+    function storeExists(storeId) {
+      return exists(storePath(storeId));
+    }
+
+    function storeData(storeId) {
+      return get(storePath(storeId)).data;
+    }
+
+    function isStoreAdmin(storeId) {
+      return signedIn()
+        && storeExists(storeId)
+        && (
+          request.auth.uid in storeData(storeId).owners
+          || request.auth.uid in storeData(storeId).adminUsers
+          || isPlatformAdmin()
+        );
+    }
+
+    function isPublicStore(storeId) {
+      return storeExists(storeId) && storeData(storeId).isActive == true;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isPlatformAdmin());
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update: if signedIn() && (request.auth.uid == userId || isPlatformAdmin());
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /stores/{storeId} {
+      allow get: if resource.data.isActive == true || isStoreAdmin(storeId);
+      allow list: if resource.data.isActive == true;
+      allow create: if isPlatformAdmin();
+      allow update, delete: if isStoreAdmin(storeId);
+
+      match /theme/{configId} {
+        allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
+        allow write: if isStoreAdmin(storeId);
+      }
+
+      match /tables/{tableId} {
+        allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
+        allow write: if isStoreAdmin(storeId);
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
+        allow write: if isStoreAdmin(storeId);
+      }
+
+      match /menuItems/{itemId} {
+        allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
+        allow write: if isStoreAdmin(storeId);
+      }
+
+      match /orders/{orderId} {
+        allow list: if isStoreAdmin(storeId);
+        // TODO_SECURITY: em produção, preferir um documento público mínimo ou token de acompanhamento.
+        allow get: if isStoreAdmin(storeId) || resource.data.trackingEnabled == true;
+        allow create: if false;
+        allow update, delete: if isStoreAdmin(storeId);
+      }
+
+      match /counters/{counterId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /orderLookup/{orderId} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,191 @@
+@use "../../theme/scss/mixins" as *;
+
+.order-tracker {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: var(--space-4);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-secondary) 20%, transparent), transparent 28rem),
+    var(--color-background);
+
+  @include respond-to(tablet) {
+    place-items: center;
+    padding: var(--space-6);
+  }
+
+  &__card {
+    width: min(100%, 42rem);
+    display: grid;
+    gap: var(--space-5);
+    padding: var(--space-5);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-strong);
+    box-shadow: var(--shadow-soft);
+  }
+
+  &__back {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: var(--space-2);
+    min-height: var(--space-9);
+    padding: 0 var(--space-3);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-pill);
+    color: var(--color-text-muted);
+    background: var(--color-background);
+    font-size: var(--text-sm);
+    font-weight: 750;
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  &__heading {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__eyebrow {
+    color: var(--color-secondary);
+    font-size: var(--text-sm);
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  &__title {
+    color: var(--color-primary);
+    font-size: var(--text-3xl);
+    line-height: var(--line-tight);
+  }
+
+  &__status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--space-9);
+    padding: var(--space-2) var(--space-3);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-success) 30%, var(--color-border));
+    border-radius: var(--radius-pill);
+    color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 7%, var(--color-surface));
+    font-size: var(--text-sm);
+    font-weight: 800;
+
+    &--received {
+      border-color: var(--color-border);
+      color: var(--color-text-muted);
+      background: var(--color-background);
+    }
+
+    &--delivered {
+      border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border));
+      color: var(--color-success);
+      background: color-mix(in srgb, var(--color-success) 7%, var(--color-surface));
+    }
+
+    &--cancelled {
+      border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+      color: var(--color-danger);
+      background: color-mix(in srgb, var(--color-danger) 7%, var(--color-surface));
+    }
+  }
+
+  &__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  &__customer-name {
+    color: var(--color-text);
+  }
+
+  &__steps {
+    display: grid;
+    gap: var(--space-3);
+    list-style: none;
+  }
+
+  &__step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--color-text-muted);
+    font-weight: 900;
+
+    &--done {
+      color: var(--color-success);
+    }
+  }
+
+  &__cancelled {
+    padding: var(--space-3);
+    border: var(--border-thin) solid var(--color-danger);
+    border-radius: var(--radius-sm);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+    font-weight: 900;
+  }
+
+  &__items {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  &__items-title {
+    font-size: var(--text-lg);
+  }
+
+  &__item {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-background);
+  }
+
+  &__item-copy {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__item-detail {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  &__total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: var(--space-4);
+    border-top: var(--border-thin) solid var(--color-border);
+    color: var(--color-primary);
+    font-size: var(--text-xl);
+    font-weight: 900;
+  }
+
+  &__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+}
