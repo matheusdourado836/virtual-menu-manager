@@ -13,6 +13,7 @@ export const paymentMethodSchema = z.enum([
   "pay_on_pickup",
   "pix_on_pickup",
   "card_on_pickup",
+  "cash_on_pickup",
 ]);
 
 export const createOrderSchema = z.object({

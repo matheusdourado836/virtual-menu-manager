@@ -1,7 +1,7 @@
 "use client";
 
-import { Loader2, Pencil, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronDown, Loader2, Pencil, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
 import { MenuItemEditorDialog } from "@/components/menu-item-editor-dialog/MenuItemEditorDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import {
@@ -23,7 +23,14 @@ interface MenuManagerProps {
   onFeedback: (message: string, variant?: "success" | "error" | "info") => void;
 }
 
-export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedback }: MenuManagerProps) {
+export interface MenuManagerHandle {
+  openCreateItem: () => void;
+}
+
+function MenuManagerComponent(
+  { storeId, categories, menuItems, onChanged, onFeedback }: MenuManagerProps,
+  ref: ForwardedRef<MenuManagerHandle>,
+) {
   const [newCategory, setNewCategory] = useState("");
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [isCreatingItem, setIsCreatingItem] = useState(false);
@@ -31,6 +38,7 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
   const [savingItemId, setSavingItemId] = useState("");
   const [deletingItemId, setDeletingItemId] = useState("");
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   const activeCategories = useMemo(() => categories.filter((category) => category.isActive), [categories]);
   const groupedItems = useMemo(
@@ -42,6 +50,13 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
     [activeCategories, menuItems],
   );
   const isEditorOpen = isCreatingItem || Boolean(editingItem);
+
+  useImperativeHandle(ref, () => ({
+    openCreateItem: () => {
+      setEditingItem(null);
+      setIsCreatingItem(true);
+    },
+  }));
 
   const addCategory = async () => {
     if (!newCategory.trim()) {
@@ -85,6 +100,13 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
     } finally {
       setSavingItemId("");
     }
+  };
+
+  const createCategoryFromEditor = async (name: string) => {
+    const category = await createCategory(storeId, name);
+    await onChanged();
+    onFeedback("Categoria criada.");
+    return category;
   };
 
   const toggleItem = async (item: MenuItem) => {
@@ -146,90 +168,101 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
           </button>
         </div>
 
-        <button
-          className="menu-manager__primary"
-          type="button"
-          onClick={() => {
-            setEditingItem(null);
-            setIsCreatingItem(true);
-          }}
-        >
-          <Plus size={18} aria-hidden />
-          Criar item
-        </button>
       </div>
 
       <div className="menu-manager__categories">
         {groupedItems.map(({ category, items }) => (
           <section className="menu-manager__category" key={category.id}>
-            <div className="menu-manager__category-header">
-              <h2 className="menu-manager__category-title">{category.name}</h2>
-              <span className="menu-manager__category-count">{items.length} itens</span>
-            </div>
-            <div className="menu-manager__items">
-              {items.map((item) => {
-                const isSaving = savingItemId === item.id;
-                const isDeleting = deletingItemId === item.id;
+            <button
+              className="menu-manager__category-header"
+              type="button"
+              aria-expanded={!collapsedCategories[category.id]}
+              onClick={() =>
+                setCollapsedCategories((current) => ({
+                  ...current,
+                  [category.id]: !current[category.id],
+                }))
+              }
+            >
+              <span className="menu-manager__category-copy">
+                <strong className="menu-manager__category-title">{category.name}</strong>
+                <span className="menu-manager__category-count">{items.length} itens</span>
+              </span>
+              <ChevronDown
+                className={`menu-manager__category-icon${
+                  !collapsedCategories[category.id] ? " menu-manager__category-icon--open" : ""
+                }`}
+                size={20}
+                aria-hidden
+              />
+            </button>
+            {!collapsedCategories[category.id] ? (
+              <div className="menu-manager__items">
+                {items.map((item) => {
+                  const isSaving = savingItemId === item.id;
+                  const isDeleting = deletingItemId === item.id;
 
-                return (
-                  <article
-                    className={`menu-manager__item${item.isAvailable ? "" : " menu-manager__item--disabled"}`}
-                    key={item.id}
-                  >
-                    <div className="menu-manager__item-copy">
-                      <strong className="menu-manager__item-name">{item.name}</strong>
-                      <span className="menu-manager__item-description">{item.description || "Sem descrição"}</span>
-                      {item.needsReview ? <em className="menu-manager__review">TODO_REVIEW</em> : null}
-                    </div>
-                    <strong className="menu-manager__price">{formatCurrency(item.price)}</strong>
-                    <div className="menu-manager__item-actions">
-                      <button
-                        className="menu-manager__icon-button"
-                        type="button"
-                        onClick={() => setEditingItem(item)}
-                        disabled={isSaving || isDeleting}
-                        aria-label={`Editar ${item.name}`}
-                        title={`Editar ${item.name}`}
-                      >
-                        <Pencil size={18} aria-hidden />
-                      </button>
-                      <button
-                        className="menu-manager__icon-button"
-                        type="button"
-                        onClick={() => toggleItem(item)}
-                        disabled={isSaving || isDeleting}
-                        aria-label={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
-                        title={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="menu-manager__spinner" size={18} aria-hidden />
-                        ) : item.isAvailable ? (
-                          <ToggleRight size={22} aria-hidden />
-                        ) : (
-                          <ToggleLeft size={22} aria-hidden />
-                        )}
-                      </button>
-                      <button
-                        className="menu-manager__icon-button menu-manager__icon-button--danger"
-                        type="button"
-                        onClick={() => setItemToDelete(item)}
-                        disabled={isSaving || isDeleting}
-                        aria-label={`Excluir ${item.name}`}
-                        title={`Excluir ${item.name}`}
-                      >
-                        <Trash2 size={18} aria-hidden />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                  return (
+                    <article
+                      className={`menu-manager__item${item.isAvailable ? "" : " menu-manager__item--disabled"}`}
+                      key={item.id}
+                    >
+                      <div className="menu-manager__item-copy">
+                        <strong className="menu-manager__item-name">{item.name}</strong>
+                        <span className="menu-manager__item-description">{item.description || "Sem descrição"}</span>
+                        {item.needsReview ? <em className="menu-manager__review">TODO_REVIEW</em> : null}
+                      </div>
+                      <strong className="menu-manager__price">{formatCurrency(item.price)}</strong>
+                      <div className="menu-manager__item-actions">
+                        <button
+                          className="menu-manager__icon-button"
+                          type="button"
+                          onClick={() => setEditingItem(item)}
+                          disabled={isSaving || isDeleting}
+                          aria-label={`Editar ${item.name}`}
+                          title={`Editar ${item.name}`}
+                        >
+                          <Pencil size={18} aria-hidden />
+                        </button>
+                        <button
+                          className="menu-manager__icon-button"
+                          type="button"
+                          onClick={() => toggleItem(item)}
+                          disabled={isSaving || isDeleting}
+                          aria-label={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
+                          title={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
+                        >
+                          {isSaving ? (
+                            <Loader2 className="menu-manager__spinner" size={18} aria-hidden />
+                          ) : item.isAvailable ? (
+                            <ToggleRight size={22} aria-hidden />
+                          ) : (
+                            <ToggleLeft size={22} aria-hidden />
+                          )}
+                        </button>
+                        <button
+                          className="menu-manager__icon-button menu-manager__icon-button--danger"
+                          type="button"
+                          onClick={() => setItemToDelete(item)}
+                          disabled={isSaving || isDeleting}
+                          aria-label={`Excluir ${item.name}`}
+                          title={`Excluir ${item.name}`}
+                        >
+                          <Trash2 size={18} aria-hidden />
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
           </section>
         ))}
       </div>
 
       {isEditorOpen ? (
         <MenuItemEditorDialog
+          storeId={storeId}
           categories={activeCategories}
           item={editingItem || undefined}
           isSaving={Boolean(savingItemId)}
@@ -240,6 +273,7 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
             }
           }}
           onSubmit={saveItem}
+          onCreateCategory={createCategoryFromEditor}
         />
       ) : null}
 
@@ -260,3 +294,5 @@ export function MenuManager({ storeId, categories, menuItems, onChanged, onFeedb
     </section>
   );
 }
+
+export const MenuManager = forwardRef(MenuManagerComponent);

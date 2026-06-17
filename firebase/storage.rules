@@ -2,14 +2,56 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformAdmin() {
+      return signedIn() && request.auth.token.platformAdmin == true;
+    }
+
+    function storePath(storeId) {
+      return /databases/(default)/documents/stores/$(storeId);
+    }
+
+    function storeData(storeId) {
+      return firestore.get(storePath(storeId)).data;
+    }
+
+    function isStoreAdmin(storeId) {
+      return signedIn()
+        && firestore.exists(storePath(storeId))
+        && (
+          request.auth.uid in storeData(storeId).owners
+          || request.auth.uid in storeData(storeId).adminUsers
+          || isPlatformAdmin()
+        );
+    }
+
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /stores/{storeId}/public/menu-items/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStoreAdmin(storeId) && isImageUpload();
+    }
+
+    match /stores/{storeId}/public/settings/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStoreAdmin(storeId) && isImageUpload();
+    }
+
     match /stores/{storeId}/public/{allPaths=**} {
       allow read: if true;
       // TODO_SECURITY: para produção, espelhar roles por loja em customClaims ou usar upload via Cloud Function.
-      allow write: if request.auth != null && request.auth.token.platformAdmin == true;
+      allow write: if isPlatformAdmin();
     }
 
     match /stores/{storeId}/private/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.token.platformAdmin == true;
+      allow read, write: if isPlatformAdmin();
     }
 
     match /{allPaths=**} {

@@ -54,7 +54,7 @@ const createOrderSchema = z.object({
   tableLabel: nullableOptionalString,
   customerName: z.string().min(2),
   customerPhone: nullableOptionalString,
-  paymentMethod: z.enum(["pay_on_pickup", "pix_on_pickup", "card_on_pickup"]),
+  paymentMethod: z.enum(["pay_on_pickup", "pix_on_pickup", "card_on_pickup", "cash_on_pickup"]),
   observation: nullableOptionalText(500),
   items: z
     .array(

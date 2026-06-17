@@ -6,9 +6,10 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { StatusPill } from "@/components/ui/status-pill/StatusPill";
 import { deleteOrder, updateOrderStatus } from "@/lib/services/store-service";
-import { formatDateTime, formatElapsedTime } from "@/lib/utils/dates";
+import { formatDateTime } from "@/lib/utils/dates";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatCurrency } from "@/lib/utils/money";
+import { getPaymentMethodLabel } from "@/lib/utils/payment";
 import type { Order, OrderStatus } from "@/types/menu";
 import "./orders-board.scss";
 
@@ -205,55 +206,80 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
             text="Crie um pedido pelo painel ou aguarde um cliente enviar pelo cardápio."
           />
         ) : filteredOrders.length ? (
-          filteredOrders.map((order) => (
-            <article className={`orders-board__order orders-board__order--${order.status}`} key={order.id}>
-              <div className="orders-board__identity">
-                <span className="orders-board__order-icon">
-                  {order.tableLabel ? <Store size={20} aria-hidden /> : <CircleDot size={20} aria-hidden />}
-                </span>
-                <span className="orders-board__order-heading">
-                  <strong>{order.tableLabel || order.customerName || "Balcão"}</strong>
-                  <small className="orders-board__order-meta">
-                    #{order.code} · {order.items.length} itens · {formatCurrency(order.total)}
-                  </small>
-                </span>
-              </div>
+          <>
+            <div className="orders-board__list-header" aria-hidden="true">
+              <span className="orders-board__header-cell orders-board__header-cell--client">Cliente</span>
+              <span className="orders-board__header-cell">Itens</span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">Pagamento</span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">Criado em</span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">Status e ações</span>
+            </div>
+            {filteredOrders.map((order) => (
+              <article className={`orders-board__order orders-board__order--${order.status}`} key={order.id}>
+                <div className="orders-board__cell orders-board__cell--client">
+                  <span className="orders-board__mobile-label">Cliente</span>
+                  <div className="orders-board__identity">
+                    <span className="orders-board__order-icon">
+                      {order.tableLabel ? <Store size={20} aria-hidden /> : <CircleDot size={20} aria-hidden />}
+                    </span>
+                    <span className="orders-board__order-heading">
+                      <strong>{order.tableLabel || order.customerName || "Balcão"}</strong>
+                      <small className="orders-board__order-meta">
+                        #{order.code} · {order.items.length} itens · {formatCurrency(order.total)}
+                      </small>
+                    </span>
+                  </div>
+                </div>
 
-              <div className="orders-board__items">
-                {order.items.slice(0, 3).map((item) => (
-                  <p className="orders-board__item-line" key={`${order.id}-${item.menuItemId}`}>
-                    <strong className="orders-board__item-quantity">{item.quantity}x</strong> {item.name}
-                  </p>
-                ))}
-                {order.items.length > 3 ? (
-                  <span className="orders-board__more-items">+ {order.items.length - 3} itens</span>
-                ) : null}
-              </div>
+                <div className="orders-board__cell orders-board__cell--items">
+                  <span className="orders-board__mobile-label">Itens</span>
+                  <div className="orders-board__items">
+                    {order.items.slice(0, 3).map((item) => (
+                      <p className="orders-board__item-line" key={`${order.id}-${item.menuItemId}`}>
+                        <strong className="orders-board__item-quantity">{item.quantity}x</strong> {item.name}
+                      </p>
+                    ))}
+                    {order.items.length > 3 ? (
+                      <span className="orders-board__more-items">+ {order.items.length - 3} itens</span>
+                    ) : null}
+                  </div>
+                </div>
 
-              <time className="orders-board__time" dateTime={order.createdAt}>
-                {formatDateTime(order.createdAt)}
-              </time>
+                <div className="orders-board__cell orders-board__cell--payment">
+                  <span className="orders-board__mobile-label">Pagamento</span>
+                  <span className="orders-board__payment">{getPaymentMethodLabel(order.paymentMethod)}</span>
+                </div>
 
-              <div className="orders-board__actions">
-                <span className="orders-board__status-summary">
-                  <StatusPill status={order.status} />
-                  <span className="orders-board__wait">{formatElapsedTime(order.createdAt)}</span>
-                </span>
-                {renderStatusActions(order)}
-                <button
-                  className="orders-board__action orders-board__action--danger"
-                  type="button"
-                  onClick={() => setConfirmingOrder(order)}
-                  disabled={Boolean(pendingAction) || Boolean(deletingOrderId)}
-                >
-                  <Trash2 size={15} aria-hidden />
-                  Excluir
-                </button>
-              </div>
+                <div className="orders-board__cell orders-board__cell--created">
+                  <span className="orders-board__mobile-label">Criado em</span>
+                  <time className="orders-board__time" dateTime={order.createdAt}>
+                    {formatDateTime(order.createdAt)}
+                  </time>
+                </div>
 
-              {order.observation ? <p className="orders-board__note">{order.observation}</p> : null}
-            </article>
-          ))
+                <div className="orders-board__cell orders-board__cell--actions">
+                  <span className="orders-board__mobile-label">Status e ações</span>
+                  <div className="orders-board__actions">
+                    <span className="orders-board__status-summary">
+                      <StatusPill status={order.status} />
+                    </span>
+                    {renderStatusActions(order)}
+                    <button
+                      className="orders-board__action orders-board__action--danger"
+                      type="button"
+                      onClick={() => setConfirmingOrder(order)}
+                      disabled={Boolean(pendingAction) || Boolean(deletingOrderId)}
+                    >
+                      <Trash2 size={15} aria-hidden />
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+
+                {order.observation ? <p className="orders-board__note">{order.observation}</p> : null}
+              </article>
+            ))}
+          </>
         ) : (
           <div className="orders-board__empty">
             <Search size={24} aria-hidden />

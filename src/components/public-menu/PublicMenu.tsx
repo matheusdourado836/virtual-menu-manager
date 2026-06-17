@@ -188,6 +188,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                 width={56}
                 height={56}
                 alt=""
+                unoptimized
               />
               <div className="public-menu__brand-copy">
                 <span className="public-menu__eyebrow">Cardápio digital</span>
@@ -262,6 +263,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                   alt=""
                   width={120}
                   height={120}
+                  unoptimized
                 />
                 <div className="public-menu__item-body">
                   <div className="public-menu__item-copy">

@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   Clock3,
   Coffee,
+  History,
   LayoutDashboard,
   LogOut,
   Palette,
@@ -19,7 +20,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
-import { MenuManager } from "@/components/menu-manager/MenuManager";
+import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
 import { OrdersBoard } from "@/components/orders-board/OrdersBoard";
 import { StoreSettings } from "@/components/store-settings/StoreSettings";
 import { TablesManager } from "@/components/tables-manager/TablesManager";
@@ -27,6 +28,7 @@ import { ThemeScope } from "@/components/theme-scope/ThemeScope";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
+import { FinancialReport } from "@/features/financial-report/components/financial-report/FinancialReport";
 import { firebaseAuth, googleProvider } from "@/lib/firebase/client";
 import { canManageStore } from "@/lib/permissions/store-permissions";
 import { getAdminStoreBundleBySlug, getStoreBundleBySlug, subscribeStoreOrders } from "@/lib/services/store-service";
@@ -35,7 +37,7 @@ import { formatCurrency } from "@/lib/utils/money";
 import type { Order, StoreBundle, StoreTheme } from "@/types/menu";
 import "./admin-shell.scss";
 
-type AdminTab = "orders" | "tables" | "menu" | "settings";
+type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "settings";
 
 const adminTabs: Array<{
   id: AdminTab;
@@ -43,15 +45,19 @@ const adminTabs: Array<{
   icon: typeof LayoutDashboard;
 }> = [
   { id: "orders", label: "Pedidos", icon: LayoutDashboard },
+  { id: "history", label: "Histórico", icon: History },
   { id: "tables", label: "Mesas", icon: QrCode },
   { id: "menu", label: "Cardápio", icon: Utensils },
+  { id: "finance", label: "Financeiro", icon: CircleDollarSign },
   { id: "settings", label: "Configurações", icon: Palette },
 ];
 
 const tabDescriptions: Record<AdminTab, string> = {
   orders: "Acompanhe a operação em tempo real.",
+  history: "Consulte todos os pedidos registrados.",
   tables: "Organize os pontos de atendimento e QR Codes.",
   menu: "Gerencie categorias, itens e disponibilidade.",
+  finance: "Veja faturamento, produtos vendidos e pagamentos.",
   settings: "Edite dados da loja, operação e identidade visual.",
 };
 
@@ -90,8 +96,10 @@ export function AdminShell({ slug }: AdminShellProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderDialog, setOrderDialog] = useState<{ tableId?: string } | null>(null);
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => new Date().getTime());
   const knownOrderIds = useRef<Set<string>>(new Set());
   const hasHydratedOrders = useRef(false);
+  const menuManagerRef = useRef<MenuManagerHandle>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
     variant: "success" | "error" | "info";
@@ -127,6 +135,14 @@ export function AdminShell({ slug }: AdminShellProps) {
         setIsAuthReady(true);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTimestamp(new Date().getTime());
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -227,10 +243,21 @@ export function AdminShell({ slug }: AdminShellProps) {
     }
   };
 
+  const now = new Date(currentTimestamp);
+
+  const recentOrders = useMemo(() => {
+    const cutoff = currentTimestamp - 24 * 60 * 60 * 1000;
+
+    return orders.filter((order) => {
+      const createdAt = new Date(order.createdAt).getTime();
+      return Number.isFinite(createdAt) && createdAt >= cutoff;
+    });
+  }, [currentTimestamp, orders]);
+
   const dashboardMetrics = useMemo(() => {
     const today = new Date().toDateString();
     const isToday = (isoDate: string) => new Date(isoDate).toDateString() === today;
-    const finalizedToday = orders.filter(
+    const finalizedToday = recentOrders.filter(
       (order) => order.status === "delivered" && isToday(order.deliveredAt || order.updatedAt),
     );
 
@@ -238,19 +265,19 @@ export function AdminShell({ slug }: AdminShellProps) {
       {
         label: "Novos",
         helper: "Aguardando confirmação",
-        value: orders.filter((order) => ["received", "accepted"].includes(order.status)).length,
+        value: recentOrders.filter((order) => ["received", "accepted"].includes(order.status)).length,
         icon: ReceiptText,
       },
       {
         label: "Em preparo",
         helper: `Tempo estimado ${bundle?.store.estimatedPrepMinutes || 0} min`,
-        value: orders.filter((order) => order.status === "preparing").length,
+        value: recentOrders.filter((order) => order.status === "preparing").length,
         icon: Clock3,
       },
       {
         label: "Prontos",
         helper: "Aguardando entrega",
-        value: orders.filter((order) => order.status === "ready").length,
+        value: recentOrders.filter((order) => order.status === "ready").length,
         icon: BellRing,
       },
       {
@@ -268,9 +295,8 @@ export function AdminShell({ slug }: AdminShellProps) {
         icon: CircleDollarSign,
       },
     ];
-  }, [bundle?.store.estimatedPrepMinutes, orders]);
+  }, [bundle?.store.estimatedPrepMinutes, recentOrders]);
 
-  const now = new Date();
   const greeting =
     now.getHours() < 12 ? "Bom dia" : now.getHours() < 18 ? "Boa tarde" : "Boa noite";
   const administratorName = user?.displayName?.split(" ")[0] || "Administrador";
@@ -435,10 +461,20 @@ export function AdminShell({ slug }: AdminShellProps) {
                   Novo pedido
                 </button>
               </div>
+            ) : activeTab === "history" ? (
+              <button className="admin-shell__refresh" type="button" onClick={refreshBundle} disabled={isRefreshing}>
+                <RefreshCw size={17} aria-hidden />
+                {isRefreshing ? "Atualizando" : "Atualizar"}
+              </button>
             ) : activeTab === "tables" ? (
               <button className="admin-shell__new-order" type="button" onClick={() => setOrderDialog({})}>
                 <Plus size={17} aria-hidden />
                 Novo pedido
+              </button>
+            ) : activeTab === "menu" ? (
+              <button className="admin-shell__new-order" type="button" onClick={() => menuManagerRef.current?.openCreateItem()}>
+                <Plus size={17} aria-hidden />
+                Criar item
               </button>
             ) : null}
           </header>
@@ -470,6 +506,13 @@ export function AdminShell({ slug }: AdminShellProps) {
           <div className="admin-shell__content">
             {activeTab === "orders" ? (
               <OrdersBoard
+                orders={recentOrders}
+                storeId={bundle.store.id}
+                onFeedback={showFeedback}
+              />
+            ) : null}
+            {activeTab === "history" ? (
+              <OrdersBoard
                 orders={orders}
                 storeId={bundle.store.id}
                 onFeedback={showFeedback}
@@ -486,12 +529,16 @@ export function AdminShell({ slug }: AdminShellProps) {
             ) : null}
             {activeTab === "menu" ? (
               <MenuManager
+                ref={menuManagerRef}
                 storeId={bundle.store.id}
                 categories={bundle.categories}
                 menuItems={bundle.menuItems}
                 onChanged={refreshBundle}
                 onFeedback={showFeedback}
               />
+            ) : null}
+            {activeTab === "finance" ? (
+              <FinancialReport storeId={bundle.store.id} tables={bundle.tables} />
             ) : null}
             {activeTab === "settings" ? (
               <StoreSettings store={bundle.store} theme={bundle.theme} onSaved={refreshBundle} onFeedback={showFeedback} />

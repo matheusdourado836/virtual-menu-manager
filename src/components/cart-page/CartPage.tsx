@@ -304,6 +304,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                       <option value="pay_on_pickup">Pagar na retirada</option>
                       <option value="pix_on_pickup">Pix na retirada</option>
                       <option value="card_on_pickup">Cartão na retirada</option>
+                      <option value="cash_on_pickup">Dinheiro na retirada</option>
                     </select>
                   </label>
 

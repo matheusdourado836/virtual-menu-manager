@@ -7,7 +7,7 @@ import { MenuItemDialog } from "@/components/menu-item-dialog/MenuItemDialog";
 import { createCartLine, getCartSubtotal, getLineTotal } from "@/features/cart/cart-utils";
 import { createAdminOrder, createTable } from "@/lib/services/store-service";
 import { formatCurrency } from "@/lib/utils/money";
-import type { CartLine, CartSelectedOption, MenuItem, StoreBundle, Table } from "@/types/menu";
+import type { CartLine, CartSelectedOption, MenuItem, PaymentMethod, StoreBundle, Table } from "@/types/menu";
 import "./admin-order-dialog.scss";
 
 type DestinationType = "person" | "table";
@@ -27,6 +27,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
   const [newTableLabel, setNewTableLabel] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_pickup");
   const [selectedCategory, setSelectedCategory] = useState(bundle.categories.find((category) => category.isActive)?.id || "");
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
@@ -159,7 +160,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
         tableLabel: destinationType === "table" ? selectedTable?.label : undefined,
         customerName: destinationType === "table" ? selectedTable?.label || "Mesa" : customerName.trim(),
         customerPhone: destinationType === "person" ? customerPhone.trim() || undefined : undefined,
-        paymentMethod: "pay_on_pickup",
+        paymentMethod,
         items: cartLines.map((line) => ({
           menuItemId: line.menuItemId,
           quantity: line.quantity,
@@ -240,6 +241,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
                     alt=""
                     width={56}
                     height={56}
+                    unoptimized
                   />
                   <span className="admin-order-dialog__item-copy">
                     <strong className="admin-order-dialog__item-name">{item.name}</strong>
@@ -342,6 +344,23 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
                   ) : null}
                 </div>
               )}
+            </section>
+
+            <section className="admin-order-dialog__section">
+              <h3 className="admin-order-dialog__section-title">Pagamento</h3>
+              <label className="admin-order-dialog__field">
+                <span>Forma de pagamento</span>
+                <select
+                  className="admin-order-dialog__control"
+                  value={paymentMethod}
+                  onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                >
+                  <option value="pay_on_pickup">Pagar na retirada</option>
+                  <option value="pix_on_pickup">Pix na retirada</option>
+                  <option value="card_on_pickup">Cartão na retirada</option>
+                  <option value="cash_on_pickup">Dinheiro na retirada</option>
+                </select>
+              </label>
             </section>
 
             <section className="admin-order-dialog__section admin-order-dialog__section--cart">

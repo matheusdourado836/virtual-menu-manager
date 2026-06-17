@@ -87,6 +87,7 @@ export function MenuItemDialog({
               alt=""
               width={160}
               height={120}
+              unoptimized
             />
             <div className="menu-item-dialog__summary-copy">
               {item.description ? <p className="menu-item-dialog__description">{item.description}</p> : null}

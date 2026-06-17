@@ -6,7 +6,7 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 
-export type PaymentMethod = "pay_on_pickup" | "pix_on_pickup" | "card_on_pickup";
+export type PaymentMethod = "pay_on_pickup" | "pix_on_pickup" | "card_on_pickup" | "cash_on_pickup";
 export type PaymentStatus = "pending" | "paid" | "cancelled";
 export type StoreRole = "owner" | "admin" | "kitchen" | "attendant";
 
@@ -145,8 +145,8 @@ export interface Order {
   customerName: string;
   customerPhone?: string;
   status: OrderStatus;
-  paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  paymentStatus?: PaymentStatus;
   observation?: string;
   items: OrderItem[];
   subtotal: number;
@@ -159,6 +159,7 @@ export interface Order {
   readyAt?: string;
   deliveredAt?: string;
   cancelledAt?: string;
+  cancelReason?: string;
 }
 
 export interface StoreBundle {

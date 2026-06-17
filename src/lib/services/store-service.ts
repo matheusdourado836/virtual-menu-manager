@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { firebaseFunctions, firestore } from "@/lib/firebase/client";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { firebaseFunctions, firebaseStorage, firestore } from "@/lib/firebase/client";
 import type { CreateOrderPayload } from "@/lib/validators/order";
 import type { Category, MenuItem, Order, OrderStatus, Store, StoreBundle, StoreTheme, Table } from "@/types/menu";
 
@@ -159,6 +160,37 @@ export const deleteMenuItem = async (storeId: string, itemId: string) => {
   await callable({ storeId, itemId });
 };
 
+const getSafeImageExtension = (file: File) => {
+  const rawExtension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  return rawExtension.replace(/[^a-z0-9]/g, "") || "jpg";
+};
+
+export const uploadMenuItemImage = async (storeId: string, file: File) => {
+  const extension = getSafeImageExtension(file);
+  const imageRef = ref(
+    firebaseStorage,
+    `stores/${storeId}/public/menu-items/${Date.now()}-${crypto.randomUUID()}.${extension}`,
+  );
+  const snapshot = await uploadBytes(imageRef, file, {
+    contentType: file.type || "image/jpeg",
+  });
+
+  return getDownloadURL(snapshot.ref);
+};
+
+export const uploadStoreAsset = async (storeId: string, file: File, assetType: "logo" | "banner") => {
+  const extension = getSafeImageExtension(file);
+  const imageRef = ref(
+    firebaseStorage,
+    `stores/${storeId}/public/settings/${assetType}/${Date.now()}-${crypto.randomUUID()}.${extension}`,
+  );
+  const snapshot = await uploadBytes(imageRef, file, {
+    contentType: file.type || "image/jpeg",
+  });
+
+  return getDownloadURL(snapshot.ref);
+};
+
 export const updateStoreSettings = async (storeId: string, payload: StoreSettingsPayload) => {
   const callable = httpsCallable(firebaseFunctions, "updateStoreSettings");
   await callable(removeUndefined({ storeId, ...payload }));
@@ -170,7 +202,7 @@ export const subscribeStoreOrders = (
   onError?: (error: Error) => void,
 ) =>
   onSnapshot(
-    query(collection(firestore, "stores", storeId, "orders"), orderBy("createdAt", "desc"), limit(80)),
+    query(collection(firestore, "stores", storeId, "orders"), orderBy("createdAt", "desc")),
     (snapshot) => {
       onChange(snapshot.docs.map((candidate) => ({ id: candidate.id, ...candidate.data() }) as Order));
     },

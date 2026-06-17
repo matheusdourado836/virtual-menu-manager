@@ -7,11 +7,6 @@
   &__toolbar {
     display: grid;
     gap: var(--space-3);
-
-    @include respond-to(tablet) {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: end;
-    }
   }
 
   &__form {
@@ -108,8 +103,25 @@
 
   &__category-header {
     display: flex;
+    width: 100%;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
+    border: 0;
+    color: inherit;
+    background: transparent;
+    text-align: left;
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__category-copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
   }
 
   &__category-title {
@@ -126,6 +138,16 @@
     color: var(--color-text-muted);
     font-size: var(--text-sm);
     font-weight: 750;
+  }
+
+  &__category-icon {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    transition: transform var(--duration-fast) var(--ease-standard);
+
+    &--open {
+      transform: rotate(180deg);
+    }
   }
 
   &__items {
@@ -221,6 +243,12 @@
 
   &__spinner {
     animation: menu-manager-spin var(--duration-normal) linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &__category-icon {
+      transition: none;
+    }
   }
 }
 
