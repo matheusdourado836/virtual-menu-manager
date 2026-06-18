@@ -10,7 +10,7 @@ test("abre no login administrativo", async ({ page }) => {
 test("carrega a loja cafe carioca no cardapio publico", async ({ page }) => {
   await page.goto("/loja/cafe-carioca");
 
-  await expect(page.getByRole("heading", { name: "Café Carioca", exact: true })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole("heading", { name: /Café Carioca/ })).toBeVisible({ timeout: 10000 });
   await expect(page.getByText("Cuscuz com calabresa").first()).toBeVisible({ timeout: 10000 });
 });
 

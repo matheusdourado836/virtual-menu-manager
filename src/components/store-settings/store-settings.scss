@@ -15,21 +15,30 @@
     z-index: var(--z-dialog);
     display: grid;
     place-items: center;
-    padding: var(--space-5);
+    padding: var(--space-3);
     background: color-mix(in srgb, var(--color-text) 58%, transparent);
+
+    @include respond-to(tablet) {
+      padding: var(--space-5);
+    }
   }
 
   &__preview-dialog {
     display: grid;
     gap: var(--space-4);
     width: min(100%, calc(var(--panel-width) + var(--space-12)));
-    max-height: calc(var(--viewport-height) - var(--space-10));
-    padding: var(--space-4);
+    max-height: calc(var(--viewport-height) - var(--space-6));
+    padding: var(--space-3);
     border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-lg);
     overflow: auto;
     background: var(--color-surface-strong);
     box-shadow: var(--shadow-soft);
+
+    @include respond-to(tablet) {
+      max-height: calc(var(--viewport-height) - var(--space-10));
+      padding: var(--space-4);
+    }
   }
 
   &__preview-header {
@@ -625,7 +634,7 @@
 
   &__day-row {
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-3);
     padding: var(--space-4);
     border-bottom: var(--border-thin) solid var(--color-border);
 
@@ -636,6 +645,7 @@
     @include respond-to(tablet) {
       grid-template-columns: minmax(calc(var(--space-10) * 4), 1fr) minmax(0, 2fr);
       align-items: center;
+      gap: var(--space-4);
     }
   }
 
@@ -667,7 +677,7 @@
 
   &__time-range {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: var(--space-2);
 
@@ -743,18 +753,28 @@
   }
 
   &__footer {
-    display: flex;
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
     align-items: center;
-    flex-wrap: wrap;
     gap: var(--space-3);
+
+    @include respond-to(tablet) {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
   }
 
   &__error {
-    margin-right: auto;
+    margin-right: 0;
     color: var(--color-danger);
     font-size: var(--text-xs);
     font-weight: 750;
+
+    @include respond-to(tablet) {
+      margin-right: auto;
+    }
   }
 
   &__save {
@@ -762,6 +782,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
+    width: 100%;
     min-height: var(--button-height);
     padding: 0 var(--space-4);
     border: 0;
@@ -769,6 +790,10 @@
     color: var(--admin-color-sidebar-text);
     background: var(--admin-color-sidebar);
     font-weight: 750;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
 
     &:disabled {
       cursor: not-allowed;

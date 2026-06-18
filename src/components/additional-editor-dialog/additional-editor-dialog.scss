@@ -182,16 +182,26 @@
   }
 
   &__footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     justify-content: flex-end;
-    flex-wrap: wrap;
     border-top: var(--border-thin) solid var(--admin-color-border);
+
+    @include respond-to(tablet) {
+      display: flex;
+      flex-wrap: wrap;
+    }
   }
 
   &__error {
-    margin-right: auto;
+    margin-right: 0;
     color: var(--color-danger);
     font-size: var(--text-xs);
     font-weight: 750;
+
+    @include respond-to(tablet) {
+      margin-right: auto;
+    }
   }
 
   &__cancel,
@@ -226,6 +236,15 @@
     border: 0;
     color: var(--admin-color-sidebar-text);
     background: var(--admin-color-sidebar);
+  }
+
+  &__footer &__cancel,
+  &__footer &__submit {
+    width: 100%;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
   }
 
   &__spinner {

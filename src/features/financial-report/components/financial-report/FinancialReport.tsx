@@ -340,9 +340,15 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
               {report.paymentBreakdown.map((row) => (
                 <div className="financial-report__row" key={row.paymentMethod}>
                   <strong className="financial-report__row-title">{row.label}</strong>
-                  <span>{row.orders} pedidos</span>
-                  <span>{formatCurrency(row.total)}</span>
-                  <span>{formatPercent(row.percentage)}%</span>
+                  <span className="financial-report__row-value" data-label="Pedidos">
+                    {row.orders} pedidos
+                  </span>
+                  <span className="financial-report__row-value" data-label="Total">
+                    {formatCurrency(row.total)}
+                  </span>
+                  <span className="financial-report__row-value" data-label="Participação">
+                    {formatPercent(row.percentage)}%
+                  </span>
                 </div>
               ))}
             </div>
@@ -386,9 +392,15 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
                 report.topProducts.slice(0, 8).map((product) => (
                   <div className="financial-report__row" key={product.menuItemId}>
                     <strong className="financial-report__row-title">{product.name}</strong>
-                    <span>{product.quantity} vendidos</span>
-                    <span>{formatCurrency(product.total)}</span>
-                    <span>{formatPercent(product.percentage)}%</span>
+                    <span className="financial-report__row-value" data-label="Quantidade">
+                      {product.quantity} vendidos
+                    </span>
+                    <span className="financial-report__row-value" data-label="Total">
+                      {formatCurrency(product.total)}
+                    </span>
+                    <span className="financial-report__row-value" data-label="Participação">
+                      {formatPercent(product.percentage)}%
+                    </span>
                   </div>
                 ))
               ) : (
@@ -409,9 +421,15 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
                 report.cancelledOrders.slice(0, 8).map((order) => (
                   <div className="financial-report__row" key={order.id}>
                     <strong className="financial-report__row-title">#{order.code}</strong>
-                    <span>{order.customerName}</span>
-                    <span>{formatCurrency(order.total)}</span>
-                    <span>{order.cancelReason ?? ""}</span>
+                    <span className="financial-report__row-value" data-label="Cliente">
+                      {order.customerName}
+                    </span>
+                    <span className="financial-report__row-value" data-label="Total">
+                      {formatCurrency(order.total)}
+                    </span>
+                    <span className="financial-report__row-value" data-label="Motivo">
+                      {order.cancelReason ?? "Não informado"}
+                    </span>
                   </div>
                 ))
               ) : (
@@ -429,10 +447,18 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
               {report.orders.slice(0, 10).map((order) => (
                 <article className="financial-report__order" key={order.id}>
                   <strong className="financial-report__row-title">#{order.code}</strong>
-                  <span>{order.customerName}</span>
-                  <span>{getPaymentMethodLabel(order.paymentMethod)}</span>
-                  <span>{formatDateTime(order.createdAt)}</span>
-                  <strong className="financial-report__order-total">{formatCurrency(order.total)}</strong>
+                  <span className="financial-report__order-field" data-label="Cliente">
+                    {order.customerName}
+                  </span>
+                  <span className="financial-report__order-field" data-label="Pagamento">
+                    {getPaymentMethodLabel(order.paymentMethod)}
+                  </span>
+                  <span className="financial-report__order-field" data-label="Criado em">
+                    {formatDateTime(order.createdAt)}
+                  </span>
+                  <strong className="financial-report__order-total" data-label="Total">
+                    {formatCurrency(order.total)}
+                  </strong>
                 </article>
               ))}
             </div>

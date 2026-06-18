@@ -99,18 +99,26 @@
   &__content {
     min-height: 0;
     display: grid;
-    overflow: hidden;
+    align-content: start;
+    overflow-y: auto;
 
     @include respond-to(desktop) {
       grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+      align-content: stretch;
+      overflow: hidden;
     }
   }
 
   &__catalog,
   &__aside {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    min-height: auto;
+    overflow: visible;
+
+    @include respond-to(desktop) {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
   }
 
   &__catalog {
@@ -228,13 +236,27 @@
   }
 
   &__add-item {
-    padding: 0 var(--space-3);
+    width: var(--button-height);
+    padding: 0;
     border: var(--border-thin) solid var(--admin-color-border);
     color: var(--admin-color-text);
     background: var(--admin-color-surface-muted);
 
     &:hover {
       border-color: var(--admin-color-border-strong);
+    }
+
+    @include respond-to(tablet) {
+      width: auto;
+      padding: 0 var(--space-3);
+    }
+  }
+
+  &__add-label {
+    display: none;
+
+    @include respond-to(tablet) {
+      display: inline;
     }
   }
 
@@ -373,13 +395,26 @@
   }
 
   &__footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     flex-wrap: wrap;
-    justify-content: flex-end;
+    align-items: stretch;
+    justify-content: stretch;
     border-top: var(--border-thin) solid var(--admin-color-border);
+
+    @include respond-to(tablet) {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
   }
 
   &__total {
-    margin-right: auto;
+    margin-right: 0;
+
+    @include respond-to(tablet) {
+      margin-right: auto;
+    }
   }
 
   &__error {
@@ -389,10 +424,15 @@
   }
 
   &__submit {
+    width: 100%;
     padding: 0 var(--space-4);
     border: 0;
     color: var(--admin-color-sidebar-text);
     background: var(--admin-color-sidebar);
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
 
     &:disabled {
       cursor: not-allowed;

@@ -176,6 +176,14 @@
     gap: var(--space-3);
   }
 
+  &__additionals-header &__primary {
+    width: 100%;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
+  }
+
   &__section-title {
     color: var(--color-text);
     font-size: var(--text-xl);
@@ -201,9 +209,9 @@
 
   &__additional {
     min-width: 0;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3);
     border: var(--border-thin) solid var(--color-border);
@@ -212,6 +220,10 @@
 
     &--disabled {
       opacity: 0.56;
+    }
+
+    @include respond-to(tablet) {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
   }
 
@@ -237,7 +249,12 @@
   &__additional-buttons {
     display: inline-flex;
     flex: 0 0 auto;
+    justify-content: flex-start;
     gap: var(--space-2);
+
+    @include respond-to(tablet) {
+      justify-content: flex-end;
+    }
   }
 
   &__categories {
@@ -337,7 +354,7 @@
   &__item {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3);
@@ -355,9 +372,14 @@
   }
 
   &__item-copy {
+    grid-column: 1 / -1;
     min-width: 0;
     display: grid;
     gap: var(--space-1);
+
+    @include respond-to(tablet) {
+      grid-column: auto;
+    }
   }
 
   &__item-name,
@@ -388,11 +410,13 @@
   }
 
   &__price {
+    min-width: 0;
     white-space: nowrap;
   }
 
   &__item-actions {
     display: flex;
+    min-width: 0;
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: var(--space-2);
@@ -516,9 +540,24 @@
   }
 
   &__dialog-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     justify-content: flex-end;
-    flex-wrap: wrap;
     border-top: var(--border-thin) solid var(--admin-color-border);
+
+    @include respond-to(tablet) {
+      display: flex;
+      flex-wrap: wrap;
+    }
+  }
+
+  &__dialog-footer &__button,
+  &__dialog-footer &__primary {
+    width: 100%;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
   }
 
   &__dialog-error {

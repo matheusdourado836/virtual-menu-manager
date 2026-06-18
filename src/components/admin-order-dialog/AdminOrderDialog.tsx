@@ -260,7 +260,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
                   </span>
                   <button className="admin-order-dialog__add-item" type="button" onClick={() => setSelectedItem(item)}>
                     <Plus size={16} aria-hidden />
-                    Adicionar
+                    <span className="admin-order-dialog__add-label">Adicionar</span>
                   </button>
                 </article>
               ))}

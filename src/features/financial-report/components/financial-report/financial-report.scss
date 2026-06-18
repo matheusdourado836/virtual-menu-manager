@@ -75,6 +75,15 @@
     }
   }
 
+  &__export,
+  &__refresh {
+    width: 100%;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
+  }
+
   &__export {
     border: var(--border-thin) solid var(--admin-color-sidebar);
     color: var(--admin-color-sidebar-text);
@@ -113,8 +122,12 @@
 
   &__summary {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-3);
+
+    @include respond-to(tablet) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 
     @include respond-to(desktop) {
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -195,10 +208,14 @@
   }
 
   &__panel-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+    display: grid;
     gap: var(--space-3);
+
+    @include respond-to(tablet) {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
   }
 
   &__panel-title {
@@ -246,8 +263,45 @@
   }
 
   &__row-title,
+  &__order-total,
+  &__row-value,
+  &__order-field {
+    min-width: 0;
+  }
+
+  &__row-title,
   &__order-total {
+    overflow: hidden;
     color: var(--color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__row-value,
+  &__order-field,
+  &__order-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+
+    &::before {
+      content: attr(data-label);
+      flex: 0 0 auto;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      font-weight: 800;
+      letter-spacing: var(--border-thin);
+      text-transform: uppercase;
+    }
+
+    @include respond-to(tablet) {
+      display: block;
+
+      &::before {
+        content: none;
+      }
+    }
   }
 
   &__bar-label,

@@ -1,3 +1,5 @@
+@use "../../../theme/scss/mixins" as *;
+
 .confirm-dialog {
   position: fixed;
   inset: 0;
@@ -72,10 +74,16 @@
   }
 
   &__actions {
-    display: flex;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
     gap: var(--space-2);
+
+    @include respond-to(tablet) {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
   }
 
   &__cancel,
@@ -110,6 +118,15 @@
     border: var(--border-thin) solid var(--color-danger);
     color: var(--admin-color-sidebar-text);
     background: var(--color-danger);
+  }
+
+  &__actions &__cancel,
+  &__actions &__confirm {
+    width: 100%;
+
+    @include respond-to(tablet) {
+      width: auto;
+    }
   }
 
   &__spinner {
