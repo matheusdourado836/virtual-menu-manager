@@ -1,7 +1,18 @@
 "use client";
 
-import { Bell, Check, ChefHat, CircleDot, Loader2, Search, Store, Trash2, X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  Bell,
+  Check,
+  ChefHat,
+  CircleDot,
+  Loader2,
+  MoreHorizontal,
+  Search,
+  Store,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { StatusPill } from "@/components/ui/status-pill/StatusPill";
@@ -13,14 +24,31 @@ import { getPaymentMethodLabel } from "@/lib/utils/payment";
 import type { Order, OrderStatus } from "@/types/menu";
 import "./orders-board.scss";
 
-type OrderGroup = "all" | "new" | "preparing" | "ready" | "finalized" | "cancelled";
+type OrderGroup =
+  | "all"
+  | "new"
+  | "preparing"
+  | "ready"
+  | "finalized"
+  | "cancelled";
 
 const orderGroups: Array<{
   id: OrderGroup;
   label: string;
   statuses: OrderStatus[];
 }> = [
-  { id: "all", label: "Todos", statuses: ["received", "accepted", "preparing", "ready", "delivered", "cancelled"] },
+  {
+    id: "all",
+    label: "Todos",
+    statuses: [
+      "received",
+      "accepted",
+      "preparing",
+      "ready",
+      "delivered",
+      "cancelled",
+    ],
+  },
   { id: "new", label: "Novos", statuses: ["received", "accepted"] },
   { id: "preparing", label: "Em preparo", statuses: ["preparing"] },
   { id: "ready", label: "Prontos", statuses: ["ready"] },
@@ -37,14 +65,23 @@ interface OrdersBoardProps {
 export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
   const [search, setSearch] = useState("");
   const [activeGroup, setActiveGroup] = useState<OrderGroup>("all");
-  const [pendingAction, setPendingAction] = useState<{ orderId: string; action: string } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    orderId: string;
+    action: string;
+  } | null>(null);
   const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState("");
+  const [openActionsOrderId, setOpenActionsOrderId] = useState("");
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filteredOrders = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    const selectedStatuses = orderGroups.find((group) => group.id === activeGroup)?.statuses || [];
-    const groupOrders = orders.filter((order) => selectedStatuses.includes(order.status));
+    const selectedStatuses =
+      orderGroups.find((group) => group.id === activeGroup)?.statuses || [];
+    const groupOrders = orders.filter((order) =>
+      selectedStatuses.includes(order.status),
+    );
 
     if (!normalized) {
       return groupOrders;
@@ -58,18 +95,55 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
     );
   }, [activeGroup, orders, search]);
 
-  const changeStatus = async (order: Order, status: OrderStatus, action: string) => {
-    if (status === "delivered") {
-      playUiSound(UI_SOUNDS.orderComplete);
+  useEffect(() => {
+    if (!openActionsOrderId) {
+      return;
     }
 
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!actionsMenuRef.current?.contains(event.target as Node)) {
+        setOpenActionsOrderId("");
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenActionsOrderId("");
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openActionsOrderId]);
+
+  const changeStatus = async (
+    order: Order,
+    status: OrderStatus,
+    action: string,
+  ) => {
     setPendingAction({ orderId: order.id, action });
 
     try {
       await updateOrderStatus(storeId, order.id, status);
+
+      if (status === "delivered") {
+        playUiSound(UI_SOUNDS.orderComplete);
+      }
+
       onFeedback(`Pedido #${order.code} atualizado.`);
+      return true;
     } catch (error) {
-      onFeedback(error instanceof Error ? error.message : "Não foi possível atualizar o pedido.", "error");
+      onFeedback(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar o pedido.",
+        "error",
+      );
+      return false;
     } finally {
       setPendingAction(null);
     }
@@ -87,9 +161,30 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
       onFeedback(`Pedido #${confirmingOrder.code} excluído.`);
       setConfirmingOrder(null);
     } catch (error) {
-      onFeedback(error instanceof Error ? error.message : "Não foi possível excluir o pedido.", "error");
+      onFeedback(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o pedido.",
+        "error",
+      );
     } finally {
       setDeletingOrderId("");
+    }
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!cancellingOrder) {
+      return;
+    }
+
+    const didCancel = await changeStatus(
+      cancellingOrder,
+      "cancelled",
+      "cancelled",
+    );
+
+    if (didCancel) {
+      setCancellingOrder(null);
     }
   };
 
@@ -99,63 +194,67 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
     label: string,
     icon: ReactNode,
     onClick: () => void,
-    isDanger = false,
   ) => {
-    const isPending = pendingAction?.orderId === order.id && pendingAction.action === action;
+    const isPending =
+      pendingAction?.orderId === order.id && pendingAction.action === action;
     const isDisabled = Boolean(pendingAction) || Boolean(deletingOrderId);
 
     return (
       <button
-        className={`orders-board__action${isDanger ? " orders-board__action--danger" : ""}`}
+        aria-label={`${label} pedido ${order.code}`}
+        className="orders-board__action orders-board__action--primary"
         type="button"
         onClick={onClick}
         disabled={isDisabled}
       >
-        {isPending ? <Loader2 className="orders-board__spinner" size={15} aria-hidden /> : icon}
+        {isPending ? (
+          <Loader2 className="orders-board__spinner" size={15} aria-hidden />
+        ) : (
+          icon
+        )}
         {isPending ? "Atualizando" : label}
       </button>
     );
   };
 
-  const renderStatusActions = (order: Order) => {
+  const renderPrimaryAction = (order: Order) => {
     if (order.status === "received") {
-      return (
-        <>
-          {renderActionButton(order, "accepted", "Aceitar", <Check size={16} aria-hidden />, () =>
-            changeStatus(order, "accepted", "accepted"),
-          )}
-          {renderActionButton(order, "preparing", "Preparar", <ChefHat size={16} aria-hidden />, () =>
-            changeStatus(order, "preparing", "preparing"),
-          )}
-          {renderActionButton(order, "cancelled", "Cancelar", <X size={16} aria-hidden />, () =>
-            changeStatus(order, "cancelled", "cancelled"),
-          )}
-        </>
+      return renderActionButton(
+        order,
+        "accepted",
+        "Aceitar",
+        <Check size={16} aria-hidden />,
+        () => changeStatus(order, "accepted", "accepted"),
       );
     }
 
     if (order.status === "accepted") {
-      return (
-        <>
-          {renderActionButton(order, "preparing", "Preparar", <ChefHat size={16} aria-hidden />, () =>
-            changeStatus(order, "preparing", "preparing"),
-          )}
-          {renderActionButton(order, "cancelled", "Cancelar", <X size={16} aria-hidden />, () =>
-            changeStatus(order, "cancelled", "cancelled"),
-          )}
-        </>
+      return renderActionButton(
+        order,
+        "preparing",
+        "Iniciar preparo",
+        <ChefHat size={16} aria-hidden />,
+        () => changeStatus(order, "preparing", "preparing"),
       );
     }
 
     if (order.status === "preparing") {
-      return renderActionButton(order, "ready", "Pronto", <Bell size={16} aria-hidden />, () =>
-        changeStatus(order, "ready", "ready"),
+      return renderActionButton(
+        order,
+        "ready",
+        "Marcar pronto",
+        <Bell size={16} aria-hidden />,
+        () => changeStatus(order, "ready", "ready"),
       );
     }
 
     if (order.status === "ready") {
-      return renderActionButton(order, "delivered", "Finalizar", <Check size={16} aria-hidden />, () =>
-        changeStatus(order, "delivered", "delivered"),
+      return renderActionButton(
+        order,
+        "delivered",
+        "Finalizar",
+        <Check size={16} aria-hidden />,
+        () => changeStatus(order, "delivered", "delivered"),
       );
     }
 
@@ -165,9 +264,15 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
   return (
     <section className="orders-board">
       <div className="orders-board__toolbar">
-        <div className="orders-board__filters" role="tablist" aria-label="Filtrar pedidos por status">
+        <div
+          className="orders-board__filters"
+          role="tablist"
+          aria-label="Filtrar pedidos por status"
+        >
           {orderGroups.map((group) => {
-            const count = orders.filter((order) => group.statuses.includes(order.status)).length;
+            const count = orders.filter((order) =>
+              group.statuses.includes(order.status),
+            ).length;
 
             return (
               <button
@@ -208,24 +313,42 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
         ) : filteredOrders.length ? (
           <>
             <div className="orders-board__list-header" aria-hidden="true">
-              <span className="orders-board__header-cell orders-board__header-cell--client">Cliente</span>
+              <span className="orders-board__header-cell orders-board__header-cell--client">
+                Cliente
+              </span>
               <span className="orders-board__header-cell">Itens</span>
-              <span className="orders-board__header-cell orders-board__header-cell--center">Pagamento</span>
-              <span className="orders-board__header-cell orders-board__header-cell--center">Criado em</span>
-              <span className="orders-board__header-cell orders-board__header-cell--center">Status e ações</span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">
+                Pagamento
+              </span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">
+                Criado em
+              </span>
+              <span className="orders-board__header-cell orders-board__header-cell--center">
+                Andamento
+              </span>
             </div>
             {filteredOrders.map((order) => (
-              <article className={`orders-board__order orders-board__order--${order.status}`} key={order.id}>
+              <article
+                className={`orders-board__order orders-board__order--${order.status}`}
+                key={order.id}
+              >
                 <div className="orders-board__cell orders-board__cell--client">
                   <span className="orders-board__mobile-label">Cliente</span>
                   <div className="orders-board__identity">
                     <span className="orders-board__order-icon">
-                      {order.tableLabel ? <Store size={20} aria-hidden /> : <CircleDot size={20} aria-hidden />}
+                      {order.tableLabel ? (
+                        <Store size={20} aria-hidden />
+                      ) : (
+                        <CircleDot size={20} aria-hidden />
+                      )}
                     </span>
                     <span className="orders-board__order-heading">
-                      <strong>{order.tableLabel || order.customerName || "Balcão"}</strong>
+                      <strong>
+                        {order.tableLabel || order.customerName || "Balcão"}
+                      </strong>
                       <small className="orders-board__order-meta">
-                        #{order.code} · {order.items.length} itens · {formatCurrency(order.total)}
+                        #{order.code} · {order.items.length} itens ·{" "}
+                        {formatCurrency(order.total)}
                       </small>
                     </span>
                   </div>
@@ -235,56 +358,129 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
                   <span className="orders-board__mobile-label">Itens</span>
                   <div className="orders-board__items">
                     {order.items.slice(0, 3).map((item) => (
-                      <p className="orders-board__item-line" key={`${order.id}-${item.menuItemId}`}>
-                        <strong className="orders-board__item-quantity">{item.quantity}x</strong> {item.name}
+                      <p
+                        className="orders-board__item-line"
+                        key={`${order.id}-${item.menuItemId}`}
+                      >
+                        <strong className="orders-board__item-quantity">
+                          {item.quantity}x
+                        </strong>{" "}
+                        {item.name}
                       </p>
                     ))}
                     {order.items.length > 3 ? (
-                      <span className="orders-board__more-items">+ {order.items.length - 3} itens</span>
+                      <span className="orders-board__more-items">
+                        + {order.items.length - 3} itens
+                      </span>
                     ) : null}
                   </div>
                 </div>
 
                 <div className="orders-board__cell orders-board__cell--payment">
                   <span className="orders-board__mobile-label">Pagamento</span>
-                  <span className="orders-board__payment">{getPaymentMethodLabel(order.paymentMethod)}</span>
+                  <span className="orders-board__payment">
+                    {getPaymentMethodLabel(order.paymentMethod)}
+                  </span>
                 </div>
 
                 <div className="orders-board__cell orders-board__cell--created">
                   <span className="orders-board__mobile-label">Criado em</span>
-                  <time className="orders-board__time" dateTime={order.createdAt}>
+                  <time
+                    className="orders-board__time"
+                    dateTime={order.createdAt}
+                  >
                     {formatDateTime(order.createdAt)}
                   </time>
                 </div>
 
                 <div className="orders-board__cell orders-board__cell--actions">
-                  <span className="orders-board__mobile-label">Status e ações</span>
+                  <span className="orders-board__mobile-label">Andamento</span>
                   <div className="orders-board__actions">
                     <span className="orders-board__status-summary">
                       <StatusPill status={order.status} />
                     </span>
-                    {renderStatusActions(order)}
-                    <button
-                      className="orders-board__action orders-board__action--danger"
-                      type="button"
-                      onClick={() => setConfirmingOrder(order)}
-                      disabled={Boolean(pendingAction) || Boolean(deletingOrderId)}
+                    {renderPrimaryAction(order)}
+                    <div
+                      className="orders-board__more"
+                      ref={
+                        openActionsOrderId === order.id
+                          ? actionsMenuRef
+                          : undefined
+                      }
                     >
-                      <Trash2 size={15} aria-hidden />
-                      Excluir
-                    </button>
+                      <button
+                        aria-expanded={openActionsOrderId === order.id}
+                        aria-haspopup="menu"
+                        aria-label={`Mais ações do pedido ${order.code}`}
+                        className="orders-board__more-trigger"
+                        disabled={
+                          Boolean(pendingAction) || Boolean(deletingOrderId)
+                        }
+                        onClick={() =>
+                          setOpenActionsOrderId((currentOrderId) =>
+                            currentOrderId === order.id ? "" : order.id,
+                          )
+                        }
+                        type="button"
+                      >
+                        <MoreHorizontal size={18} aria-hidden />
+                      </button>
+
+                      {openActionsOrderId === order.id ? (
+                        <div
+                          aria-label={`Ações do pedido ${order.code}`}
+                          className="orders-board__menu"
+                          role="menu"
+                        >
+                          {order.status !== "delivered" &&
+                          order.status !== "cancelled" ? (
+                            <button
+                              className="orders-board__menu-item"
+                              onClick={() => {
+                                setOpenActionsOrderId("");
+                                setCancellingOrder(order);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              <X size={16} aria-hidden />
+                              Cancelar pedido
+                            </button>
+                          ) : null}
+
+                          <button
+                            className="orders-board__menu-item orders-board__menu-item--danger"
+                            onClick={() => {
+                              setOpenActionsOrderId("");
+                              setConfirmingOrder(order);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            <Trash2 size={16} aria-hidden />
+                            Excluir pedido
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
-                {order.observation ? <p className="orders-board__note">{order.observation}</p> : null}
+                {order.observation ? (
+                  <p className="orders-board__note">{order.observation}</p>
+                ) : null}
               </article>
             ))}
           </>
         ) : (
           <div className="orders-board__empty">
             <Search size={24} aria-hidden />
-            <strong className="orders-board__empty-title">Nenhum pedido encontrado</strong>
-            <span className="orders-board__empty-text">Ajuste o status selecionado ou o termo de busca.</span>
+            <strong className="orders-board__empty-title">
+              Nenhum pedido encontrado
+            </strong>
+            <span className="orders-board__empty-text">
+              Ajuste o status selecionado ou o termo de busca.
+            </span>
           </div>
         )}
       </div>
@@ -301,6 +497,25 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
             }
           }}
           onConfirm={confirmRemoveOrder}
+        />
+      ) : null}
+
+      {cancellingOrder ? (
+        <ConfirmDialog
+          title="Cancelar este pedido?"
+          description={`O pedido #${cancellingOrder.code} será movido para a aba de cancelados e não poderá continuar no fluxo de preparo.`}
+          confirmLabel="Cancelar pedido"
+          loadingLabel="Cancelando"
+          isLoading={
+            pendingAction?.orderId === cancellingOrder.id &&
+            pendingAction.action === "cancelled"
+          }
+          onCancel={() => {
+            if (!pendingAction) {
+              setCancellingOrder(null);
+            }
+          }}
+          onConfirm={confirmCancelOrder}
         />
       ) : null}
     </section>
