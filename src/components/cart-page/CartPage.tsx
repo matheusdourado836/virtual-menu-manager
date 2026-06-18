@@ -10,7 +10,6 @@ import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { getCartSubtotal, getLineTotal, readStoredCart, writeStoredCart } from "@/features/cart/cart-utils";
 import { writeStoredOrderReference } from "@/features/order-tracking/order-tracking-storage";
 import { createOrder, getStoreBundleBySlug } from "@/lib/services/store-service";
-import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import type { CartLine, PaymentMethod, StoreBundle } from "@/types/menu";
@@ -123,7 +122,6 @@ export function CartPage({ slug, tableId }: CartPageProps) {
       return;
     }
 
-    playUiSound(UI_SOUNDS.orderComplete);
     setIsSubmitting(true);
 
     try {

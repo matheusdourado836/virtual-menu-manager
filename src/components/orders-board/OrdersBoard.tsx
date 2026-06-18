@@ -5,6 +5,7 @@ import {
   Check,
   ChefHat,
   CircleDot,
+  Eye,
   Loader2,
   MoreHorizontal,
   Search,
@@ -15,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
+import { OrderDetailsDialog } from "@/components/order-details-dialog/OrderDetailsDialog";
 import { StatusPill } from "@/components/ui/status-pill/StatusPill";
 import { deleteOrder, updateOrderStatus } from "@/lib/services/store-service";
 import { formatDateTime } from "@/lib/utils/dates";
@@ -65,6 +67,7 @@ interface OrdersBoardProps {
 export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
   const [search, setSearch] = useState("");
   const [activeGroup, setActiveGroup] = useState<OrderGroup>("all");
+  const [selectedOrderId, setSelectedOrderId] = useState("");
   const [pendingAction, setPendingAction] = useState<{
     orderId: string;
     action: string;
@@ -74,6 +77,11 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [openActionsOrderId, setOpenActionsOrderId] = useState("");
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedOrder = useMemo(
+    () => orders.find((order) => order.id === selectedOrderId) || null,
+    [orders, selectedOrderId],
+  );
 
   const filteredOrders = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -217,6 +225,10 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
     );
   };
 
+  const shouldOpenOrderDetails = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    !target.closest("button, a, input, textarea, select, label");
+
   const renderPrimaryAction = (order: Order) => {
     if (order.status === "received") {
       return renderActionButton(
@@ -331,6 +343,11 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
               <article
                 className={`orders-board__order orders-board__order--${order.status}`}
                 key={order.id}
+                onClick={(event) => {
+                  if (shouldOpenOrderDetails(event.target)) {
+                    setSelectedOrderId(order.id);
+                  }
+                }}
               >
                 <div className="orders-board__cell orders-board__cell--client">
                   <span className="orders-board__mobile-label">Cliente</span>
@@ -432,6 +449,19 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
                           className="orders-board__menu"
                           role="menu"
                         >
+                          <button
+                            className="orders-board__menu-item"
+                            onClick={() => {
+                              setOpenActionsOrderId("");
+                              setSelectedOrderId(order.id);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            <Eye size={16} aria-hidden />
+                            Ver detalhes
+                          </button>
+
                           {order.status !== "delivered" &&
                           order.status !== "cancelled" ? (
                             <button
@@ -484,6 +514,13 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
           </div>
         )}
       </div>
+
+      {selectedOrder ? (
+        <OrderDetailsDialog
+          order={selectedOrder}
+          onClose={() => setSelectedOrderId("")}
+        />
+      ) : null}
 
       {confirmingOrder ? (
         <ConfirmDialog

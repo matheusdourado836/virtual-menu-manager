@@ -15,7 +15,11 @@
   --radius-md: var(--radius-lg);
 
   min-height: 100vh;
+  width: 100%;
+  min-width: 0;
+  max-width: 100vw;
   display: grid;
+  overflow-x: clip;
   background: var(--color-background);
 
   @include respond-to(desktop) {
@@ -263,7 +267,9 @@
     display: grid;
     align-content: start;
     gap: var(--space-6);
+    width: 100%;
     min-width: 0;
+    max-width: 100vw;
     overflow: visible;
     padding: var(--space-5) var(--space-4) var(--space-8);
 

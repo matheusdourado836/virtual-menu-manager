@@ -128,14 +128,22 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
   if (!order) {
     return (
       <main className="order-tracker">
-        <EmptyState
-          icon={<Search size={28} aria-hidden />}
-          title={loadError ? "Não foi possível acompanhar o pedido" : "Pedido não encontrado"}
-          text={
-            loadError ||
-            "Pedidos mockados ficam no navegador em que foram criados. Com Firebase real, esta rota usa o índice orderLookup."
-          }
-        />
+        <section className="order-tracker__empty-card">
+          <EmptyState
+            icon={<Search size={28} aria-hidden />}
+            title="Pedido não encontrado"
+            text={
+              loadError ||
+              "Esse pedido não foi encontrado ou pode ter sido cancelado pela loja."
+            }
+          />
+          {menuLink ? (
+            <Link className="order-tracker__empty-action" href={menuLink}>
+              <ArrowLeft size={17} aria-hidden />
+              Voltar ao cardápio
+            </Link>
+          ) : null}
+        </section>
       </main>
     );
   }
