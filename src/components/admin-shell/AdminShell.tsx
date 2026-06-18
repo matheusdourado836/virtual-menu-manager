@@ -19,6 +19,7 @@ import {
   Store,
   Utensils,
 } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
@@ -26,6 +27,7 @@ import { OrdersBoard } from "@/components/orders-board/OrdersBoard";
 import { StoreSettings } from "@/components/store-settings/StoreSettings";
 import { TablesManager } from "@/components/tables-manager/TablesManager";
 import { ThemeScope } from "@/components/theme-scope/ThemeScope";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
@@ -97,6 +99,8 @@ export function AdminShell({ slug }: AdminShellProps) {
   const [loadError, setLoadError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [orderDialog, setOrderDialog] = useState<{ tableId?: string } | null>(null);
   const [currentTimestamp, setCurrentTimestamp] = useState(() => new Date().getTime());
   const knownOrderIds = useRef<Set<string>>(new Set());
@@ -219,7 +223,7 @@ export function AdminShell({ slug }: AdminShellProps) {
     setAuthLoading("email");
 
     try {
-      await signInWithEmailAndPassword(firebaseAuth, email, password);
+      await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Falha no login.");
     } finally {
@@ -244,8 +248,17 @@ export function AdminShell({ slug }: AdminShellProps) {
     }
   };
 
-  const submitLogout = () => {
-    void signOut(firebaseAuth);
+  const submitLogout = async () => {
+    setIsSigningOut(true);
+
+    try {
+      await signOut(firebaseAuth);
+      setIsLogoutConfirmOpen(false);
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : "Não foi possível sair do painel.", "error");
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   const refreshBundle = async () => {
@@ -317,7 +330,8 @@ export function AdminShell({ slug }: AdminShellProps) {
 
   const greeting =
     now.getHours() < 12 ? "Bom dia" : now.getHours() < 18 ? "Boa tarde" : "Boa noite";
-  const administratorName = user?.displayName?.split(" ")[0] || "Administrador";
+  const storeName = bundle?.store.name || "loja";
+  const storeLogoUrl = bundle?.theme.logoUrl || bundle?.store.logoUrl || "/placeholder-logo.svg";
   const formattedDate = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "full",
     timeStyle: "short",
@@ -339,7 +353,7 @@ export function AdminShell({ slug }: AdminShellProps) {
             <h1 className="admin-shell__login-title">Entrar no painel</h1>
             {loadError ? <p className="admin-shell__error">{loadError}</p> : null}
             <label className="admin-shell__field">
-              <span>Email</span>
+              <span>Email *</span>
               <input
                 className="admin-shell__control"
                 value={email}
@@ -351,7 +365,7 @@ export function AdminShell({ slug }: AdminShellProps) {
               />
             </label>
             <label className="admin-shell__field">
-              <span>Senha</span>
+              <span>Senha *</span>
               <input
                 className="admin-shell__control"
                 value={password}
@@ -439,24 +453,19 @@ export function AdminShell({ slug }: AdminShellProps) {
           </nav>
 
           <div className="admin-shell__sidebar-footer">
-            <div className="admin-shell__store-summary">
-              <span className="admin-shell__store-icon">
-                <Store size={18} aria-hidden />
-              </span>
-              <span className="admin-shell__store-copy">
-                <strong className="admin-shell__sidebar-title">{bundle.store.name}</strong>
-                <small className="admin-shell__sidebar-detail">
-                  {bundle.store.isAcceptingOrders ? "Operação online" : "Operação pausada"}
-                </small>
-              </span>
-            </div>
-
-            <button className="admin-shell__logout" type="button" onClick={submitLogout}>
-              <span className="admin-shell__user-icon">
-                <Coffee size={18} aria-hidden />
+            <button className="admin-shell__logout" type="button" onClick={() => setIsLogoutConfirmOpen(true)}>
+              <span className="admin-shell__logout-logo">
+                <Image
+                  className="admin-shell__logout-image"
+                  src={storeLogoUrl}
+                  alt=""
+                  width={40}
+                  height={40}
+                  unoptimized
+                />
               </span>
               <span className="admin-shell__user-copy">
-                <strong className="admin-shell__sidebar-title">{administratorName}</strong>
+                <strong className="admin-shell__sidebar-title">Sair</strong>
                 <small className="admin-shell__sidebar-detail">{user.email}</small>
               </span>
               <LogOut size={17} aria-hidden />
@@ -469,7 +478,7 @@ export function AdminShell({ slug }: AdminShellProps) {
             <div>
               <h1 className="admin-shell__topbar-title">
                 {activeTab === "orders"
-                  ? `${greeting}, ${administratorName}`
+                  ? `${greeting}, ${bundle.store.name}`
                   : adminTabs.find((tab) => tab.id === activeTab)?.label}
               </h1>
               <p className="admin-shell__topbar-subtitle">
@@ -558,6 +567,7 @@ export function AdminShell({ slug }: AdminShellProps) {
                 ref={menuManagerRef}
                 storeId={bundle.store.id}
                 categories={bundle.categories}
+                additionals={bundle.additionals}
                 menuItems={bundle.menuItems}
                 onChanged={refreshBundle}
                 onFeedback={showFeedback}
@@ -587,6 +597,22 @@ export function AdminShell({ slug }: AdminShellProps) {
             onClose={() => setOrderDialog(null)}
             onCreated={refreshBundle}
             onFeedback={showFeedback}
+          />
+        ) : null}
+
+        {isLogoutConfirmOpen ? (
+          <ConfirmDialog
+            title="Sair do painel?"
+            description={`Você vai encerrar a sessão administrativa de ${storeName}.`}
+            confirmLabel="Sair"
+            loadingLabel="Saindo"
+            isLoading={isSigningOut}
+            onCancel={() => {
+              if (!isSigningOut) {
+                setIsLogoutConfirmOpen(false);
+              }
+            }}
+            onConfirm={() => void submitLogout()}
           />
         ) : null}
 

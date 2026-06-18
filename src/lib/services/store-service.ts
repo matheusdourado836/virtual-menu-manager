@@ -1,15 +1,33 @@
 import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebaseFunctions, firebaseStorage, firestore } from "@/lib/firebase/client";
 import type { CreateOrderPayload } from "@/lib/validators/order";
-import type { Category, MenuItem, Order, OrderStatus, Store, StoreBundle, StoreTheme, Table } from "@/types/menu";
+import type {
+  Additional,
+  Category,
+  MenuItem,
+  OptionGroup,
+  Order,
+  OrderStatus,
+  Store,
+  StoreBundle,
+  StoreTheme,
+  Table,
+} from "@/types/menu";
 
 export interface MenuItemInput {
   categoryId: string;
   name: string;
   description?: string;
   imageUrl?: string;
+  price: number;
+  isAvailable: boolean;
+  optionsGroups: OptionGroup[];
+}
+
+export interface AdditionalInput {
+  name: string;
   price: number;
   isAvailable: boolean;
 }
@@ -83,10 +101,11 @@ export const getStoreBundleBySlug = async (
   }
 
   const store = { id: storeDocument.id, ...storeDocument.data() } as StoreBundle["store"];
-  const [themeDocument, tableSnapshot, categorySnapshot, itemSnapshot] = await Promise.all([
+  const [themeDocument, tableSnapshot, categorySnapshot, additionalSnapshot, itemSnapshot] = await Promise.all([
     getDoc(doc(firestore, "stores", store.id, "theme", "default")),
     getDocs(query(collection(firestore, "stores", store.id, "tables"), orderBy("label", "asc"))),
     getDocs(query(collection(firestore, "stores", store.id, "categories"), orderBy("order", "asc"))),
+    getDocs(query(collection(firestore, "stores", store.id, "additionals"), orderBy("order", "asc"))),
     getDocs(query(collection(firestore, "stores", store.id, "menuItems"), orderBy("order", "asc"))),
   ]);
 
@@ -97,6 +116,7 @@ export const getStoreBundleBySlug = async (
     categories: categorySnapshot.docs.map(
       (candidate) => ({ id: candidate.id, ...candidate.data() }) as Category,
     ),
+    additionals: additionalSnapshot.docs.map((candidate) => ({ id: candidate.id, ...candidate.data() }) as Additional),
     menuItems: itemSnapshot.docs.map((candidate) => ({ id: candidate.id, ...candidate.data() }) as MenuItem),
   };
 };
@@ -141,6 +161,29 @@ export const createCategory = async (storeId: string, name: string) => {
   return response.data as Category;
 };
 
+export const createAdditional = async (storeId: string, additional: AdditionalInput) => {
+  const callable = httpsCallable(firebaseFunctions, "createAdditional");
+  const response = await callable(removeUndefined({ storeId, ...additional }));
+
+  return response.data as Additional;
+};
+
+export const updateAdditional = async (
+  storeId: string,
+  additionalId: string,
+  additional: AdditionalInput,
+) => {
+  const callable = httpsCallable(firebaseFunctions, "updateAdditional");
+  const response = await callable(removeUndefined({ storeId, additionalId, ...additional }));
+
+  return response.data as Additional;
+};
+
+export const deleteAdditional = async (storeId: string, additionalId: string) => {
+  const callable = httpsCallable(firebaseFunctions, "deleteAdditional");
+  await callable({ storeId, additionalId });
+};
+
 export const createMenuItem = async (storeId: string, item: MenuItemInput) => {
   const callable = httpsCallable(firebaseFunctions, "createMenuItem");
   const response = await callable(removeUndefined({ storeId, ...item }));
@@ -165,6 +208,9 @@ const getSafeImageExtension = (file: File) => {
   return rawExtension.replace(/[^a-z0-9]/g, "") || "jpg";
 };
 
+const isManagedStorageUrl = (url: string) =>
+  url.startsWith("gs://") || url.startsWith("https://firebasestorage.googleapis.com/");
+
 export const uploadMenuItemImage = async (storeId: string, file: File) => {
   const extension = getSafeImageExtension(file);
   const imageRef = ref(
@@ -176,6 +222,14 @@ export const uploadMenuItemImage = async (storeId: string, file: File) => {
   });
 
   return getDownloadURL(snapshot.ref);
+};
+
+export const deleteUploadedImage = async (imageUrl: string) => {
+  if (!isManagedStorageUrl(imageUrl)) {
+    return;
+  }
+
+  await deleteObject(ref(firebaseStorage, imageUrl));
 };
 
 export const uploadStoreAsset = async (storeId: string, file: File, assetType: "logo" | "banner") => {
@@ -231,13 +285,13 @@ export const subscribeOrder = (
       const lookup = snapshot.data() as { storeId?: string; orderId?: string } | undefined;
       unsubscribeOrder?.();
 
-      if (!lookup?.storeId) {
+      if (!lookup?.storeId || !lookup.orderId) {
         onChange(null);
         return;
       }
 
       unsubscribeOrder = onSnapshot(
-        doc(firestore, "stores", lookup.storeId, "orders", lookup.orderId || orderId),
+        doc(firestore, "stores", lookup.storeId, "orders", lookup.orderId),
         (orderSnapshot) =>
           onChange(orderSnapshot.exists() ? ({ id: orderSnapshot.id, ...orderSnapshot.data() } as Order) : null),
         (error) => onError?.(error),

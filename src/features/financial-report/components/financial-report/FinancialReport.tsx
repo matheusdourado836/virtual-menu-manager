@@ -201,21 +201,23 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
         {filters.period === "custom" ? (
           <>
             <label className="financial-report__field">
-              <span className="financial-report__label">Início</span>
+              <span className="financial-report__label">Início *</span>
               <input
                 className="financial-report__control"
                 type="date"
                 value={filters.startDate}
                 onChange={(event) => updateFilter("startDate", event.target.value)}
+                required
               />
             </label>
             <label className="financial-report__field">
-              <span className="financial-report__label">Fim</span>
+              <span className="financial-report__label">Fim *</span>
               <input
                 className="financial-report__control"
                 type="date"
                 value={filters.endDate}
                 onChange={(event) => updateFilter("endDate", event.target.value)}
+                required
               />
             </label>
           </>
@@ -407,9 +409,9 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
                 report.cancelledOrders.slice(0, 8).map((order) => (
                   <div className="financial-report__row" key={order.id}>
                     <strong className="financial-report__row-title">#{order.code}</strong>
-                    <span>{order.customerName || order.tableLabel || "Balcão"}</span>
+                    <span>{order.customerName}</span>
                     <span>{formatCurrency(order.total)}</span>
-                    <span>{order.cancelReason || "Não informado"}</span>
+                    <span>{order.cancelReason ?? ""}</span>
                   </div>
                 ))
               ) : (
@@ -427,7 +429,7 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
               {report.orders.slice(0, 10).map((order) => (
                 <article className="financial-report__order" key={order.id}>
                   <strong className="financial-report__row-title">#{order.code}</strong>
-                  <span>{order.customerName || order.tableLabel || "Balcão"}</span>
+                  <span>{order.customerName}</span>
                   <span>{getPaymentMethodLabel(order.paymentMethod)}</span>
                   <span>{formatDateTime(order.createdAt)}</span>
                   <strong className="financial-report__order-total">{formatCurrency(order.total)}</strong>

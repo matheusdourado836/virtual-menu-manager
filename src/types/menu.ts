@@ -74,12 +74,22 @@ export interface Category {
   isActive: boolean;
 }
 
+export interface Additional {
+  id: string;
+  storeId: string;
+  name: string;
+  price: number;
+  isAvailable: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface OptionChoice {
   id: string;
   name: string;
   price: number;
   isAvailable: boolean;
-  needsReview?: boolean;
 }
 
 export interface OptionGroup {
@@ -104,8 +114,6 @@ export interface MenuItem {
   optionsGroups: OptionGroup[];
   createdAt: string;
   updatedAt: string;
-  needsReview?: boolean;
-  reviewNote?: string;
 }
 
 export interface CartSelectedOption {
@@ -145,8 +153,8 @@ export interface Order {
   customerName: string;
   customerPhone?: string;
   status: OrderStatus;
-  paymentMethod?: PaymentMethod;
-  paymentStatus?: PaymentStatus;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
   observation?: string;
   items: OrderItem[];
   subtotal: number;
@@ -167,5 +175,6 @@ export interface StoreBundle {
   theme: StoreTheme;
   tables: Table[];
   categories: Category[];
+  additionals: Additional[];
   menuItems: MenuItem[];
 }

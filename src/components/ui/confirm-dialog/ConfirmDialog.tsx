@@ -9,6 +9,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel: string;
   cancelLabel?: string;
+  loadingLabel?: string;
   isLoading?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel = "Cancelar",
+  loadingLabel = "Excluindo",
   isLoading = false,
   onCancel,
   onConfirm,
@@ -72,7 +74,7 @@ export function ConfirmDialog({
           </button>
           <button className="confirm-dialog__confirm" type="button" onClick={onConfirm} disabled={isLoading}>
             {isLoading ? <Loader2 className="confirm-dialog__spinner" size={16} aria-hidden /> : null}
-            {isLoading ? "Excluindo" : confirmLabel}
+            {isLoading ? loadingLabel : confirmLabel}
           </button>
         </div>
       </section>

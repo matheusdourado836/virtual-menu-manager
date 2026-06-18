@@ -11,6 +11,7 @@ import { getCartSubtotal, getLineTotal, readStoredCart, writeStoredCart } from "
 import { writeStoredOrderReference } from "@/features/order-tracking/order-tracking-storage";
 import { createOrder, getStoreBundleBySlug } from "@/lib/services/store-service";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
+import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import type { CartLine, PaymentMethod, StoreBundle } from "@/types/menu";
 import "./cart-page.scss";
@@ -109,6 +110,11 @@ export function CartPage({ slug, tableId }: CartPageProps) {
 
     if (!customerName.trim()) {
       setError("Informe seu nome para identificar o pedido.");
+      return;
+    }
+
+    if (customerPhone.trim() && !isValidBrazilianPhone(customerPhone)) {
+      setError("Informe um telefone válido com DDD.");
       return;
     }
 
@@ -274,12 +280,13 @@ export function CartPage({ slug, tableId }: CartPageProps) {
 
                 <div className="cart-page__form">
                   <label className="cart-page__field">
-                    <span className="cart-page__label">Nome</span>
+                    <span className="cart-page__label">Nome *</span>
                     <input
                       className="cart-page__control"
                       value={customerName}
                       placeholder="Como podemos chamar você?"
                       onChange={(event) => setCustomerName(event.target.value)}
+                      required
                     />
                   </label>
 
@@ -288,18 +295,22 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                     <input
                       className="cart-page__control"
                       value={customerPhone}
+                      type="tel"
                       inputMode="tel"
+                      autoComplete="tel"
+                      maxLength={15}
                       placeholder="(00) 00000-0000"
-                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      onChange={(event) => setCustomerPhone(formatPhoneInput(event.target.value))}
                     />
                   </label>
 
                   <label className="cart-page__field">
-                    <span className="cart-page__label">Pagamento</span>
+                    <span className="cart-page__label">Pagamento *</span>
                     <select
                       className="cart-page__control"
                       value={paymentMethod}
                       onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                      required
                     >
                       <option value="pay_on_pickup">Pagar na retirada</option>
                       <option value="pix_on_pickup">Pix na retirada</option>

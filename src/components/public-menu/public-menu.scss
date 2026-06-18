@@ -266,6 +266,7 @@
     box-shadow:
       var(--shadow-panel),
       inset var(--space-1) 0 0 color-mix(in srgb, var(--color-secondary) 56%, transparent);
+    cursor: pointer;
     transition:
       border-color var(--duration-fast) var(--ease-standard),
       transform var(--duration-fast) var(--ease-standard),
@@ -275,6 +276,11 @@
       border-color: color-mix(in srgb, var(--color-secondary) 46%, var(--color-border));
       box-shadow: var(--shadow-soft);
       transform: translateY(calc(var(--border-thin) * -1));
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring), var(--shadow-soft);
     }
   }
 

@@ -50,6 +50,7 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
 
   const addTable = async () => {
     if (!newLabel.trim()) {
+      setError("Informe o nome da mesa ou ponto de retirada.");
       return;
     }
 
@@ -91,12 +92,13 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
     <section className="tables-manager">
       <div className="tables-manager__form">
         <label className="tables-manager__field">
-          <span>Nova mesa ou ponto de retirada</span>
+          <span>Nova mesa ou ponto de retirada *</span>
           <input
             className="tables-manager__control"
             value={newLabel}
             onChange={(event) => setNewLabel(event.target.value)}
             placeholder="Mesa 03"
+            required
           />
         </label>
         <button className="tables-manager__add" type="button" onClick={addTable}>

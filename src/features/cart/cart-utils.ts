@@ -63,9 +63,13 @@ export const buildTrustedOrderItems = (lines: CartLine[], menuItems: MenuItem[])
     }
 
     const officialOptions = line.selectedOptions.map((selectedOption) => {
-      const officialChoice = officialItem.optionsGroups
-        .find((group) => group.id === selectedOption.groupId)
-        ?.choices.find((choice) => choice.id === selectedOption.choiceId);
+      const officialGroup = officialItem.optionsGroups.find((group) => group.id === selectedOption.groupId);
+
+      if (!officialGroup) {
+        throw new Error(`Grupo ${selectedOption.groupId} inválido para ${officialItem.name}.`);
+      }
+
+      const officialChoice = officialGroup.choices.find((choice) => choice.id === selectedOption.choiceId);
 
       if (!officialChoice) {
         throw new Error(`Adicional ${selectedOption.choiceId} inválido para ${officialItem.name}.`);
@@ -73,9 +77,7 @@ export const buildTrustedOrderItems = (lines: CartLine[], menuItems: MenuItem[])
 
       return {
         groupId: selectedOption.groupId,
-        groupName:
-          officialItem.optionsGroups.find((group) => group.id === selectedOption.groupId)?.name ||
-          selectedOption.groupName,
+        groupName: officialGroup.name,
         choiceId: officialChoice.id,
         choiceName: officialChoice.name,
         price: officialChoice.price,

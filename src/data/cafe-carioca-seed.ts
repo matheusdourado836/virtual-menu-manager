@@ -1,4 +1,4 @@
-import type { Category, MenuItem, OptionGroup, Store, StoreBundle, StoreTheme, Table } from "@/types/menu";
+import type { Additional, Category, MenuItem, OptionGroup, Store, StoreBundle, StoreTheme, Table } from "@/types/menu";
 
 const now = "2026-06-02T12:00:00.000Z";
 
@@ -109,14 +109,23 @@ export const cafeCariocaAdditionalGroup: OptionGroup = {
   })),
 };
 
+export const cafeCariocaAdditionals: Additional[] = cafeCariocaAdditionalGroup.choices.map((choice, index) => ({
+  id: choice.id,
+  storeId: cafeCariocaStore.id,
+  name: choice.name,
+  price: choice.price,
+  isAvailable: choice.isAvailable,
+  order: index + 1,
+  createdAt: now,
+  updatedAt: now,
+}));
+
 const snack = (
   id: string,
   name: string,
   price: number,
   description = "",
   order = 1,
-  needsReview = false,
-  reviewNote?: string,
 ): MenuItem => ({
   id,
   storeId: cafeCariocaStore.id,
@@ -130,8 +139,6 @@ const snack = (
   optionsGroups: [cafeCariocaAdditionalGroup],
   createdAt: now,
   updatedAt: now,
-  needsReview,
-  reviewNote,
 });
 
 const drink = (
@@ -140,8 +147,6 @@ const drink = (
   price: number,
   description = "",
   order = 1,
-  needsReview = false,
-  reviewNote?: string,
 ): MenuItem => ({
   id,
   storeId: cafeCariocaStore.id,
@@ -155,8 +160,6 @@ const drink = (
   optionsGroups: [],
   createdAt: now,
   updatedAt: now,
-  needsReview,
-  reviewNote,
 });
 
 export const cafeCariocaMenuItems: MenuItem[] = [
@@ -169,11 +172,11 @@ export const cafeCariocaMenuItems: MenuItem[] = [
   snack("misto-completo", "Misto completo", 12, "Queijo, presunto e ovo", 7),
   snack("pao-queijo-90g", "Pão de queijo 90g", 4, "Unidade", 8),
   snack("sanduiche-natural-300g", "Sanduíche Natural 300g", 10, "Com maionese defumada", 9),
-  snack("salgado", "Salgado", 7, "Sabores", 10, true, "TODO_REVIEW: sabores não aparecem na imagem."),
-  snack("bolo-ft", "Bolo ft", 6, "Milho e formigueiro", 11, true, "TODO_REVIEW: confirmar se 'ft' significa fatia."),
-  snack("empada", "Empada", 7, "Sabores", 12, true, "TODO_REVIEW: sabores não aparecem na imagem."),
-  drink("suco-polpa-200ml", "Suco - polpa 200ml", 6, "Sabores", 1, true, "TODO_REVIEW: sabores não aparecem na imagem."),
-  drink("suco-polpa-300ml", "Suco - polpa 300ml", 7, "Sabores", 2, true, "TODO_REVIEW: sabores não aparecem na imagem."),
+  snack("salgado", "Salgado", 7, "Sabores", 10),
+  snack("bolo-ft", "Bolo ft", 6, "Milho e formigueiro", 11),
+  snack("empada", "Empada", 7, "Sabores", 12),
+  drink("suco-polpa-200ml", "Suco - polpa 200ml", 6, "Sabores", 1),
+  drink("suco-polpa-300ml", "Suco - polpa 300ml", 7, "Sabores", 2),
   drink("cafe-pequeno", "Café pequeno", 2, "", 3),
   drink("cafe-leite-pequeno", "Café com leite pequeno", 2, "", 4),
   drink("cafe-grande", "Café grande", 4, "", 5),
@@ -187,6 +190,7 @@ export const cafeCariocaBundle: StoreBundle = {
   theme: cafeCariocaTheme,
   tables: cafeCariocaTables,
   categories: cafeCariocaCategories,
+  additionals: cafeCariocaAdditionals,
   menuItems: cafeCariocaMenuItems,
 };
 

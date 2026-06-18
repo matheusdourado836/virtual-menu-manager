@@ -439,6 +439,12 @@
       border-color: var(--admin-color-border-strong);
       box-shadow: var(--shadow-soft);
     }
+
+    &--dragging {
+      border-color: var(--admin-color-sidebar);
+      background: var(--admin-color-surface-muted);
+      box-shadow: var(--focus-ring);
+    }
   }
 
   &__upload--logo {
@@ -463,6 +469,40 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  &__remove-image {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    display: inline-grid;
+    place-items: center;
+    width: var(--space-7);
+    height: var(--space-7);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-pill);
+    color: var(--color-text);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+    transition:
+      border-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard),
+      transform var(--duration-fast) var(--ease-standard);
+
+    &:hover {
+      border-color: var(--color-danger);
+      color: var(--color-danger);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
   }
 
   &__upload-placeholder {

@@ -2,14 +2,16 @@
 
 import { ImagePlus, Loader2, Plus, Save, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState, type FormEvent } from "react";
-import { uploadMenuItemImage, type MenuItemInput } from "@/lib/services/store-service";
-import type { Category, MenuItem } from "@/types/menu";
+import { useEffect, useState, type DragEvent, type FormEvent } from "react";
+import { deleteUploadedImage, uploadMenuItemImage, type MenuItemInput } from "@/lib/services/store-service";
+import { formatPriceInput, getPriceDigits, parsePrice, sanitizePriceDigits } from "@/lib/utils/input-format";
+import type { Additional, Category, MenuItem, OptionGroup } from "@/types/menu";
 import "./menu-item-editor-dialog.scss";
 
 interface MenuItemEditorDialogProps {
   storeId: string;
   categories: Category[];
+  additionals: Additional[];
   item?: MenuItem;
   isSaving: boolean;
   onClose: () => void;
@@ -19,21 +21,12 @@ interface MenuItemEditorDialogProps {
 
 const createCategoryOptionValue = "__create_category__";
 const maxImageSizeInBytes = 5 * 1024 * 1024;
-
-const formatPriceInput = (digits: string) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number(digits || "0") / 100);
-
-const getPriceDigits = (price?: number) =>
-  typeof price === "number" ? String(Math.max(0, Math.round(price * 100))) : "";
-
-const parsePrice = (digits: string) => Number(digits || "0") / 100;
+const defaultAdditionalGroupId = "adicionais";
 
 export function MenuItemEditorDialog({
   storeId,
   categories,
+  additionals,
   item,
   isSaving,
   onClose,
@@ -45,23 +38,63 @@ export function MenuItemEditorDialog({
   const [currentImageUrl] = useState(item?.imageUrl || "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [isImageRemoved, setIsImageRemoved] = useState(false);
   const [categoryId, setCategoryId] = useState(item?.categoryId || categories[0]?.id || "");
   const [priceDigits, setPriceDigits] = useState(getPriceDigits(item?.price));
   const [isAvailable, setIsAvailable] = useState(item?.isAvailable ?? true);
+  const [hasAdditionals, setHasAdditionals] = useState(
+    item ? item.optionsGroups.some((group) => group.choices.length > 0) : false,
+  );
+  const [selectedAdditionalIds, setSelectedAdditionalIds] = useState(
+    item?.optionsGroups.flatMap((group) => group.choices.map((choice) => choice.id)) || [],
+  );
   const [createdCategories, setCreatedCategories] = useState<Category[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCategoryCreatorOpen, setIsCategoryCreatorOpen] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isImageDragging, setIsImageDragging] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const isBusy = isSaving || isUploadingImage || isCreatingCategory;
-  const displayedImageUrl = imagePreviewUrl || currentImageUrl;
+  const displayedImageUrl = isImageRemoved ? "" : imagePreviewUrl || currentImageUrl;
 
   const availableCategories = [
     ...categories,
     ...createdCategories.filter((category) => !categories.some((current) => current.id === category.id)),
   ];
+  const additionalGroupId =
+    item?.optionsGroups.find((group) => group.choices.length > 0)?.id || defaultAdditionalGroupId;
+
+  const buildOptionsGroups = (): OptionGroup[] => {
+    if (!hasAdditionals) {
+      return [];
+    }
+
+    const choices = additionals
+      .filter((additional) => selectedAdditionalIds.includes(additional.id))
+      .map((additional) => ({
+        id: additional.id,
+        name: additional.name,
+        price: additional.price,
+        isAvailable: additional.isAvailable,
+      }));
+
+    if (!choices.length) {
+      return [];
+    }
+
+    return [
+      {
+        id: additionalGroupId,
+        name: "Adicionais",
+        minSelected: 0,
+        maxSelected: choices.length,
+        choices,
+        isRequired: false,
+      },
+    ];
+  };
 
   useEffect(() => {
     return () => {
@@ -80,6 +113,11 @@ export function MenuItemEditorDialog({
       return;
     }
 
+    if (hasAdditionals && !selectedAdditionalIds.length) {
+      setError("Selecione os adicionais ou marque que o item não tem adicionais.");
+      return;
+    }
+
     if (imageFile && imageFile.size > maxImageSizeInBytes) {
       setError("A imagem deve ter até 5 MB.");
       return;
@@ -89,7 +127,7 @@ export function MenuItemEditorDialog({
 
     try {
       setIsUploadingImage(Boolean(imageFile));
-      const imageUrl = imageFile ? await uploadMenuItemImage(storeId, imageFile) : currentImageUrl;
+      const imageUrl = isImageRemoved ? "" : imageFile ? await uploadMenuItemImage(storeId, imageFile) : currentImageUrl;
 
       await onSubmit({
         categoryId,
@@ -98,7 +136,12 @@ export function MenuItemEditorDialog({
         imageUrl,
         price: parsedPrice,
         isAvailable,
+        optionsGroups: buildOptionsGroups(),
       });
+
+      if (currentImageUrl && currentImageUrl !== imageUrl) {
+        await deleteUploadedImage(currentImageUrl).catch(() => undefined);
+      }
     } catch {
       setError("Revise os dados e tente novamente.");
     } finally {
@@ -158,7 +201,43 @@ export function MenuItemEditorDialog({
 
     setImageFile(file);
     setImagePreviewUrl(URL.createObjectURL(file));
+    setIsImageRemoved(false);
     setError("");
+  };
+
+  const removeImage = () => {
+    if (isBusy) {
+      return;
+    }
+
+    setImageFile(null);
+    setImagePreviewUrl("");
+    setIsImageRemoved(true);
+    setError("");
+  };
+
+  const dragImageFile = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+
+    if (!isBusy) {
+      setIsImageDragging(true);
+    }
+  };
+
+  const leaveImageDropZone = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsImageDragging(false);
+  };
+
+  const dropImageFile = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsImageDragging(false);
+
+    if (isBusy) {
+      return;
+    }
+
+    selectImageFile(event.dataTransfer.files[0]);
   };
 
   const closeCategoryCreator = () => {
@@ -169,6 +248,15 @@ export function MenuItemEditorDialog({
     setCategoryError("");
     setNewCategoryName("");
     setIsCategoryCreatorOpen(false);
+  };
+
+  const toggleAdditional = (additionalId: string) => {
+    setSelectedAdditionalIds((current) =>
+      current.includes(additionalId)
+        ? current.filter((currentAdditionalId) => currentAdditionalId !== additionalId)
+        : [...current, additionalId],
+    );
+    setError("");
   };
 
   return (
@@ -196,12 +284,23 @@ export function MenuItemEditorDialog({
         <div className="menu-item-editor-dialog__content">
           <label className="menu-item-editor-dialog__image-field">
             <span className="menu-item-editor-dialog__label">Imagem</span>
-            <span className="menu-item-editor-dialog__upload">
+            <span
+              className={`menu-item-editor-dialog__upload${
+                isImageDragging ? " menu-item-editor-dialog__upload--dragging" : ""
+              }`}
+              onDragEnter={dragImageFile}
+              onDragOver={dragImageFile}
+              onDragLeave={leaveImageDropZone}
+              onDrop={dropImageFile}
+            >
               <input
                 className="menu-item-editor-dialog__file-input"
                 type="file"
                 accept="image/*"
-                onChange={(event) => selectImageFile(event.target.files?.[0])}
+                onChange={(event) => {
+                  selectImageFile(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
                 disabled={isBusy}
               />
               <span className="menu-item-editor-dialog__upload-box">
@@ -221,11 +320,27 @@ export function MenuItemEditorDialog({
                   </span>
                 )}
               </span>
+              {displayedImageUrl ? (
+                <button
+                  className="menu-item-editor-dialog__remove-image"
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    removeImage();
+                  }}
+                  disabled={isBusy}
+                  aria-label="Remover imagem"
+                  title="Remover imagem"
+                >
+                  <X size={16} aria-hidden />
+                </button>
+              ) : null}
             </span>
           </label>
 
           <label className="menu-item-editor-dialog__field">
-            <span className="menu-item-editor-dialog__label">Nome</span>
+            <span className="menu-item-editor-dialog__label">Nome *</span>
             <input
               className="menu-item-editor-dialog__control"
               value={name}
@@ -249,7 +364,7 @@ export function MenuItemEditorDialog({
           <div className="menu-item-editor-dialog__grid">
             <div className="menu-item-editor-dialog__field">
               <label className="menu-item-editor-dialog__label" htmlFor="menu-item-category">
-                Categoria
+                Categoria *
               </label>
               <select
                 id="menu-item-category"
@@ -271,19 +386,82 @@ export function MenuItemEditorDialog({
             </div>
 
             <label className="menu-item-editor-dialog__field">
-              <span className="menu-item-editor-dialog__label">Preço</span>
+              <span className="menu-item-editor-dialog__label">Preço *</span>
               <input
                 className="menu-item-editor-dialog__control"
+                type="text"
                 value={formatPriceInput(priceDigits)}
-                onChange={(event) =>
-                  setPriceDigits(event.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 9))
-                }
+                onChange={(event) => setPriceDigits(sanitizePriceDigits(event.target.value))}
                 inputMode="numeric"
+                autoComplete="off"
                 placeholder="R$ 0,00"
                 required
               />
             </label>
           </div>
+
+          <section className="menu-item-editor-dialog__addons">
+            <div className="menu-item-editor-dialog__addons-header">
+              <div>
+                <span className="menu-item-editor-dialog__label">Adicionais</span>
+                <p className="menu-item-editor-dialog__hint">
+                  Escolha quais adicionais estarão disponíveis para este item.
+                </p>
+              </div>
+              <label className="menu-item-editor-dialog__toggle">
+                <input
+                  className="menu-item-editor-dialog__toggle-input"
+                  type="checkbox"
+                  checked={!hasAdditionals}
+                  onChange={(event) => {
+                    setHasAdditionals(!event.target.checked);
+                    if (event.target.checked) {
+                      setSelectedAdditionalIds([]);
+                    }
+                    setError("");
+                  }}
+                />
+                <span className="menu-item-editor-dialog__toggle-control" />
+                Sem adicionais
+              </label>
+            </div>
+
+            {hasAdditionals ? (
+              additionals.length ? (
+                <div className="menu-item-editor-dialog__addons-list">
+                  {additionals.map((additional) => {
+                    const isSelected = selectedAdditionalIds.includes(additional.id);
+
+                    return (
+                      <label
+                        className={`menu-item-editor-dialog__addon${
+                          isSelected ? " menu-item-editor-dialog__addon--selected" : ""
+                        }${additional.isAvailable ? "" : " menu-item-editor-dialog__addon--disabled"}`}
+                        key={additional.id}
+                      >
+                        <input
+                          className="menu-item-editor-dialog__addon-checkbox"
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleAdditional(additional.id)}
+                        />
+                        <span className="menu-item-editor-dialog__addon-copy">
+                          <strong className="menu-item-editor-dialog__addon-name">{additional.name}</strong>
+                          <small className="menu-item-editor-dialog__addon-price">
+                            {formatPriceInput(getPriceDigits(additional.price))}
+                          </small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="menu-item-editor-dialog__hint">
+                  Cadastre adicionais na tela de Cardápio para poder vinculá-los ao item.
+                </p>
+              )
+            ) : null}
+          </section>
 
           {item ? (
             <label className="menu-item-editor-dialog__switch">
@@ -355,12 +533,13 @@ export function MenuItemEditorDialog({
             </header>
 
             <label className="menu-item-editor-dialog__field">
-              <span className="menu-item-editor-dialog__label">Nome da categoria</span>
+              <span className="menu-item-editor-dialog__label">Nome da categoria *</span>
               <input
                 className="menu-item-editor-dialog__control"
                 value={newCategoryName}
                 onChange={(event) => setNewCategoryName(event.target.value)}
                 placeholder="Ex.: Sobremesas"
+                required
               />
             </label>
 

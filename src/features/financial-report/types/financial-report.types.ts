@@ -34,7 +34,7 @@ export interface FinancialSummary {
 }
 
 export interface PaymentBreakdownItem {
-  paymentMethod: PaymentMethod | "unknown";
+  paymentMethod: PaymentMethod;
   label: string;
   orders: number;
   total: number;

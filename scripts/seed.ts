@@ -93,6 +93,10 @@ async function seedWithAdmin() {
       batch.set(storeRef.collection("categories").doc(category.id), removeUndefined(category), { merge: true });
     }
 
+    for (const additional of bundle.additionals) {
+      batch.set(storeRef.collection("additionals").doc(additional.id), removeUndefined(additional), { merge: true });
+    }
+
     for (const item of bundle.menuItems) {
       batch.set(storeRef.collection("menuItems").doc(item.id), removeUndefined(item), { merge: true });
     }
@@ -133,6 +137,10 @@ async function seedWithClient() {
 
       for (const category of bundle.categories) {
         batch.set(doc(db, "stores", bundle.store.id, "categories", category.id), removeUndefined(category), { merge: true });
+      }
+
+      for (const additional of bundle.additionals) {
+        batch.set(doc(db, "stores", bundle.store.id, "additionals", additional.id), removeUndefined(additional), { merge: true });
       }
 
       for (const item of bundle.menuItems) {

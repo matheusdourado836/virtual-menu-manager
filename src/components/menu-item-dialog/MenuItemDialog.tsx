@@ -57,6 +57,16 @@ export function MenuItemDialog({
       ),
     [item, selectedOptionIds],
   );
+  const visibleOptionGroups = useMemo(
+    () =>
+      item.optionsGroups
+        .map((group) => ({
+          ...group,
+          choices: group.choices.filter((choice) => choice.isAvailable),
+        }))
+        .filter((group) => group.choices.length > 0),
+    [item.optionsGroups],
+  );
 
   return (
     <div className="menu-item-dialog" role="presentation" onMouseDown={onClose}>
@@ -95,7 +105,7 @@ export function MenuItemDialog({
             </div>
           </div>
 
-          {item.optionsGroups.map((group) => {
+          {visibleOptionGroups.map((group) => {
             const selectedCount = group.choices.filter((choice) => selectedOptionIds.includes(choice.id)).length;
 
             return (
@@ -113,35 +123,33 @@ export function MenuItemDialog({
                 </div>
 
                 <div className="menu-item-dialog__choices">
-                  {group.choices
-                    .filter((choice) => choice.isAvailable)
-                    .map((choice) => {
-                      const isSelected = selectedOptionIds.includes(choice.id);
+                  {group.choices.map((choice) => {
+                    const isSelected = selectedOptionIds.includes(choice.id);
 
-                      return (
-                        <button
-                          className={`menu-item-dialog__choice${
-                            isSelected ? " menu-item-dialog__choice--selected" : ""
+                    return (
+                      <button
+                        className={`menu-item-dialog__choice${
+                          isSelected ? " menu-item-dialog__choice--selected" : ""
+                        }`}
+                        type="button"
+                        aria-pressed={isSelected}
+                        key={choice.id}
+                        onClick={() => onToggleOption(group.id, choice.id, group.maxSelected)}
+                      >
+                        <span className="menu-item-dialog__choice-copy">
+                          <strong className="menu-item-dialog__choice-name">{choice.name}</strong>
+                          <small className="menu-item-dialog__choice-price">+ {formatCurrency(choice.price)}</small>
+                        </span>
+                        <span
+                          className={`menu-item-dialog__choice-check${
+                            isSelected ? " menu-item-dialog__choice-check--selected" : ""
                           }`}
-                          type="button"
-                          aria-pressed={isSelected}
-                          key={choice.id}
-                          onClick={() => onToggleOption(group.id, choice.id, group.maxSelected)}
                         >
-                          <span className="menu-item-dialog__choice-copy">
-                            <strong className="menu-item-dialog__choice-name">{choice.name}</strong>
-                            <small className="menu-item-dialog__choice-price">+ {formatCurrency(choice.price)}</small>
-                          </span>
-                          <span
-                            className={`menu-item-dialog__choice-check${
-                              isSelected ? " menu-item-dialog__choice-check--selected" : ""
-                            }`}
-                          >
-                            {isSelected ? <Check size={15} aria-hidden /> : null}
-                          </span>
-                        </button>
-                      );
-                    })}
+                          {isSelected ? <Check size={15} aria-hidden /> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
             );

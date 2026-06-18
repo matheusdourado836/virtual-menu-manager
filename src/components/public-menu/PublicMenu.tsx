@@ -102,6 +102,10 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     return bundle.menuItems.filter((item) => item.categoryId === selectedCategory && item.isAvailable);
   }, [bundle, selectedCategory]);
 
+  const openItem = (item: MenuItem) => {
+    setSelectedItem(item);
+  };
+
   useEffect(() => {
     if (!bundle || !hasLoadedCart) {
       return;
@@ -113,7 +117,12 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const toggleOption = (item: MenuItem, groupId: string, choiceId: string, maxSelected: number) => {
     const current = selectedOptions[item.id] || [];
     const group = item.optionsGroups.find((candidate) => candidate.id === groupId);
-    const groupChoiceIds = group?.choices.map((choice) => choice.id) || [];
+
+    if (!group) {
+      return;
+    }
+
+    const groupChoiceIds = group.choices.map((choice) => choice.id);
     const selectedInGroup = current.filter((candidate) => groupChoiceIds.includes(candidate));
 
     const next = current.includes(choiceId)
@@ -256,7 +265,20 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
 
           <div className="public-menu__items">
             {visibleItems.map((item) => (
-              <article className="public-menu__item" key={item.id}>
+              <article
+                className="public-menu__item"
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openItem(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openItem(item);
+                  }
+                }}
+                aria-label={`Adicionar ${item.name}`}
+              >
                 <Image
                   className="public-menu__item-image"
                   src={item.imageUrl || "/placeholder-item.svg"}
@@ -268,25 +290,15 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                 <div className="public-menu__item-body">
                   <div className="public-menu__item-copy">
                     <h3 className="public-menu__item-title">{item.name}</h3>
-                    <p className="public-menu__item-description">
-                      {item.description ||
-                        (item.optionsGroups.length
-                          ? "Personalize com seus adicionais favoritos."
-                          : "Preparado na hora.")}
-                    </p>
+                    <p className="public-menu__item-description">{item.description}</p>
                   </div>
 
                   <div className="public-menu__item-footer">
                     <strong className="public-menu__price">{formatCurrency(item.price)}</strong>
-                    <button
-                      className="public-menu__customize"
-                      type="button"
-                      onClick={() => setSelectedItem(item)}
-                      aria-label={`Adicionar ${item.name}`}
-                    >
+                    <span className="public-menu__customize" aria-hidden="true">
                       <Plus size={16} aria-hidden />
                       Adicionar
-                    </button>
+                    </span>
                   </div>
                 </div>
               </article>

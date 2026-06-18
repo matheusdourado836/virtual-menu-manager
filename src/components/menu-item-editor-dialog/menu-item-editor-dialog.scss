@@ -154,6 +154,12 @@
     width: var(--menu-card-image-size);
     height: var(--menu-card-image-size);
     display: grid;
+
+    &--dragging &-box {
+      border-color: var(--admin-color-sidebar);
+      background: var(--admin-color-surface-muted);
+      box-shadow: var(--focus-ring);
+    }
   }
 
   &__file-input {
@@ -203,6 +209,41 @@
 
   &__file-input:focus-visible + &__upload-box {
     box-shadow: var(--focus-ring);
+  }
+
+  &__remove-image {
+    position: absolute;
+    top: calc(var(--space-2) * -1);
+    right: calc(var(--space-2) * -1);
+    z-index: 2;
+    display: inline-grid;
+    place-items: center;
+    width: var(--space-7);
+    height: var(--space-7);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-pill);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface);
+    box-shadow: var(--shadow-panel);
+    transition:
+      border-color var(--duration-fast) var(--ease-standard),
+      background var(--duration-fast) var(--ease-standard),
+      transform var(--duration-fast) var(--ease-standard);
+
+    &:hover {
+      border-color: var(--color-danger);
+      color: var(--color-danger);
+      background: var(--admin-color-surface);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
   }
 
   &__file-input:disabled + &__upload-box {
@@ -271,6 +312,137 @@
 
   &__switch-title {
     font-size: var(--text-sm);
+  }
+
+  &__addons {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-md);
+    background: var(--admin-color-surface-muted);
+  }
+
+  &__addons-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  &__hint {
+    margin-top: var(--space-1);
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-xs);
+    line-height: var(--line-normal);
+  }
+
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--admin-color-text);
+    font-size: var(--text-sm);
+    font-weight: 750;
+  }
+
+  &__toggle-input {
+    position: absolute;
+    inline-size: var(--space-1);
+    block-size: var(--space-1);
+    opacity: 0;
+  }
+
+  &__toggle-control {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: var(--space-10);
+    height: var(--space-6);
+    border-radius: var(--radius-pill);
+    background: var(--admin-color-border-strong);
+
+    &::after {
+      content: "";
+      width: var(--space-4);
+      height: var(--space-4);
+      border-radius: var(--radius-pill);
+      background: var(--admin-color-surface);
+      transform: translateX(calc(var(--space-2) * -1));
+      transition: transform var(--duration-fast) var(--ease-standard);
+    }
+  }
+
+  &__toggle-input:checked + &__toggle-control {
+    background: var(--admin-color-sidebar);
+
+    &::after {
+      transform: translateX(var(--space-2));
+    }
+  }
+
+  &__toggle-input:focus-visible + &__toggle-control {
+    box-shadow: var(--focus-ring);
+  }
+
+  &__addons-list {
+    display: grid;
+    gap: var(--space-2);
+
+    @include respond-to(tablet) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  &__addon {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-md);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface);
+    transition:
+      border-color var(--duration-fast) var(--ease-standard),
+      background var(--duration-fast) var(--ease-standard);
+
+    &--selected {
+      border-color: var(--admin-color-sidebar);
+      background: color-mix(in srgb, var(--admin-color-sidebar) 6%, var(--admin-color-surface));
+    }
+
+    &--disabled {
+      opacity: 0.56;
+    }
+  }
+
+  &__addon-checkbox {
+    width: var(--space-5);
+    height: var(--space-5);
+    accent-color: var(--admin-color-sidebar);
+  }
+
+  &__addon-copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__addon-name {
+    overflow: hidden;
+    color: var(--admin-color-text);
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__addon-price {
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-xs);
   }
 
   &__footer {
@@ -382,7 +554,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .menu-item-editor-dialog {
+    &__addon,
     &__switch-control::after,
+    &__toggle-control::after,
     &__upload-box,
     &__spinner {
       animation: none;

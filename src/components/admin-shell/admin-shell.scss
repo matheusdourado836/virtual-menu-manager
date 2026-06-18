@@ -53,6 +53,7 @@
       z-index: calc(var(--z-dialog) - 1);
       width: var(--admin-sidebar-width);
       height: var(--viewport-height);
+      grid-template-rows: auto auto minmax(0, 1fr);
       overflow-y: auto;
     }
   }
@@ -65,7 +66,8 @@
   }
 
   &__store-icon,
-  &__user-icon {
+  &__user-icon,
+  &__logout-logo {
     display: inline-grid;
     flex: 0 0 auto;
     place-items: center;
@@ -171,9 +173,21 @@
   }
 
   &__store-icon,
-  &__user-icon {
+  &__user-icon,
+  &__logout-logo {
     width: var(--space-10);
     height: var(--space-10);
+  }
+
+  &__logout-logo {
+    overflow: hidden;
+    background: color-mix(in srgb, var(--admin-color-sidebar-text) 7%, transparent);
+  }
+
+  &__logout-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   &__store-copy,
@@ -200,12 +214,16 @@
   &__logout {
     width: 100%;
     justify-content: flex-start;
-    min-height: auto;
+    min-height: var(--button-height);
     padding: 0;
     border: 0;
     color: var(--admin-color-sidebar-text);
     background: transparent;
     text-align: left;
+
+    &:hover {
+      color: var(--admin-color-sidebar-text);
+    }
   }
 
   &__workspace {

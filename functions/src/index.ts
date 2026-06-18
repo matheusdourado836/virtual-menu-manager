@@ -111,6 +111,22 @@ const createCategorySchema = z.object({
   name: z.string().trim().min(2).max(80),
 });
 
+const optionChoiceSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(2).max(120),
+  price: z.number().min(0).max(99999),
+  isAvailable: z.boolean().default(true),
+});
+
+const optionGroupSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(2).max(120),
+  minSelected: z.number().int().min(0).max(99),
+  maxSelected: z.number().int().min(0).max(99),
+  choices: z.array(optionChoiceSchema).max(100),
+  isRequired: z.boolean().default(false),
+});
+
 const menuItemFieldsSchema = z.object({
   categoryId: z.string().min(1),
   name: z.string().trim().min(2).max(120),
@@ -118,6 +134,7 @@ const menuItemFieldsSchema = z.object({
   imageUrl: optionalTrimmedValue(500),
   price: z.number().min(0).max(99999),
   isAvailable: z.boolean().default(true),
+  optionsGroups: z.array(optionGroupSchema).max(20),
 });
 
 const createMenuItemSchema = menuItemFieldsSchema.extend({
@@ -132,6 +149,26 @@ const updateMenuItemSchema = menuItemFieldsSchema.extend({
 const deleteMenuItemSchema = z.object({
   storeId: z.string().min(1),
   itemId: z.string().min(1),
+});
+
+const additionalFieldsSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  price: z.number().min(0).max(99999),
+  isAvailable: z.boolean().default(true),
+});
+
+const createAdditionalSchema = additionalFieldsSchema.extend({
+  storeId: z.string().min(1),
+});
+
+const updateAdditionalSchema = additionalFieldsSchema.extend({
+  storeId: z.string().min(1),
+  additionalId: z.string().min(1),
+});
+
+const deleteAdditionalSchema = z.object({
+  storeId: z.string().min(1),
+  additionalId: z.string().min(1),
 });
 
 const updateStoreSettingsSchema = z.object({
@@ -208,10 +245,11 @@ const getStoreBundle = async (storeSnapshot: admin.firestore.DocumentSnapshot) =
   }
 
   const storeRef = db.collection("stores").doc(storeSnapshot.id);
-  const [themeSnapshot, tableSnapshot, categorySnapshot, itemSnapshot] = await Promise.all([
+  const [themeSnapshot, tableSnapshot, categorySnapshot, additionalSnapshot, itemSnapshot] = await Promise.all([
     storeRef.collection("theme").doc("default").get(),
     storeRef.collection("tables").orderBy("label", "asc").get(),
     storeRef.collection("categories").orderBy("order", "asc").get(),
+    storeRef.collection("additionals").orderBy("order", "asc").get(),
     storeRef.collection("menuItems").orderBy("order", "asc").get(),
   ]);
 
@@ -224,6 +262,7 @@ const getStoreBundle = async (storeSnapshot: admin.firestore.DocumentSnapshot) =
     theme: mapDocument(themeSnapshot),
     tables: tableSnapshot.docs.map(mapDocument),
     categories: categorySnapshot.docs.map(mapDocument),
+    additionals: additionalSnapshot.docs.map(mapDocument),
     menuItems: itemSnapshot.docs.map(mapDocument),
   };
 };
@@ -294,17 +333,24 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
 
     for (const item of payload.items) {
       const itemSnapshot = await transaction.get(storeRef.collection("menuItems").doc(item.menuItemId));
-      const officialItem = itemSnapshot.data();
+      const officialItem = itemSnapshot.data() as
+        | (z.infer<typeof menuItemFieldsSchema> & { name: string })
+        | undefined;
 
       if (!officialItem?.isAvailable) {
         throw new HttpsError("failed-precondition", `Item ${item.menuItemId} indisponível.`);
       }
 
       const selectedOptions = item.selectedOptions.map((selectedOption) => {
-        const group = officialItem.optionsGroups?.find((candidate: { id: string }) => candidate.id === selectedOption.groupId);
-        const choice = group?.choices?.find((candidate: { id: string }) => candidate.id === selectedOption.choiceId);
+        const group = officialItem.optionsGroups.find((candidate) => candidate.id === selectedOption.groupId);
 
-        if (!choice?.isAvailable) {
+        if (!group) {
+          throw new HttpsError("failed-precondition", `Grupo ${selectedOption.groupId} inválido.`);
+        }
+
+        const choice = group.choices.find((candidate) => candidate.id === selectedOption.choiceId);
+
+        if (!choice || !choice.isAvailable) {
           throw new HttpsError("failed-precondition", `Adicional ${selectedOption.choiceId} indisponível.`);
         }
 
@@ -453,6 +499,124 @@ export const createCategory = onCall(async (request) => {
   return category;
 });
 
+const getNextOrder = async (collectionRef: admin.firestore.CollectionReference) => {
+  const lastSnapshot = await collectionRef.orderBy("order", "desc").limit(1).get();
+  return Number(lastSnapshot.docs[0]?.data().order || 0) + 1;
+};
+
+const updateEmbeddedAdditionalChoices = async (
+  storeId: string,
+  additionalId: string,
+  updater: (choices: z.infer<typeof optionChoiceSchema>[]) => z.infer<typeof optionChoiceSchema>[],
+) => {
+  const itemSnapshot = await db.collection(`stores/${storeId}/menuItems`).get();
+  const batch = db.batch();
+  const now = new Date().toISOString();
+  let hasChanges = false;
+
+  itemSnapshot.docs.forEach((itemDocument) => {
+    const data = itemDocument.data() as { optionsGroups: z.infer<typeof optionGroupSchema>[] };
+    const groups = data.optionsGroups;
+    let itemChanged = false;
+    const nextGroups = groups
+      .map((group) => {
+        const hasAdditional = group.choices.some((choice) => choice.id === additionalId);
+
+        if (!hasAdditional) {
+          return group;
+        }
+
+        itemChanged = true;
+        return {
+          ...group,
+          choices: updater(group.choices),
+        };
+      })
+      .filter((group) => group.choices.length > 0);
+
+    if (itemChanged) {
+      hasChanges = true;
+      batch.set(itemDocument.ref, { optionsGroups: nextGroups, updatedAt: now }, { merge: true });
+    }
+  });
+
+  if (hasChanges) {
+    await batch.commit();
+  }
+};
+
+export const createAdditional = onCall(async (request) => {
+  const payload = createAdditionalSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const now = new Date().toISOString();
+  const additionalRef = db.collection(`stores/${payload.storeId}/additionals`).doc();
+  const additional = {
+    id: additionalRef.id,
+    storeId: payload.storeId,
+    name: payload.name,
+    price: payload.price,
+    isAvailable: payload.isAvailable,
+    order: await getNextOrder(db.collection(`stores/${payload.storeId}/additionals`)),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await additionalRef.set(removeUndefined(additional));
+  return additional;
+});
+
+export const updateAdditional = onCall(async (request) => {
+  const payload = updateAdditionalSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const additionalRef = db.doc(`stores/${payload.storeId}/additionals/${payload.additionalId}`);
+  const additionalSnapshot = await additionalRef.get();
+  const now = new Date().toISOString();
+  const order =
+    Number(additionalSnapshot.data()?.order || 0) ||
+    (await getNextOrder(db.collection(`stores/${payload.storeId}/additionals`)));
+  const createdAt = additionalSnapshot.data()?.createdAt || now;
+  const additional = {
+    id: payload.additionalId,
+    storeId: payload.storeId,
+    name: payload.name,
+    price: payload.price,
+    isAvailable: payload.isAvailable,
+    order,
+    createdAt,
+    updatedAt: now,
+  };
+
+  await additionalRef.set(removeUndefined(additional), { merge: true });
+  await updateEmbeddedAdditionalChoices(payload.storeId, payload.additionalId, (choices) =>
+    choices.map((choice) =>
+      choice.id === payload.additionalId
+        ? {
+            ...choice,
+            name: payload.name,
+            price: payload.price,
+            isAvailable: payload.isAvailable,
+          }
+        : choice,
+    ),
+  );
+
+  return additional;
+});
+
+export const deleteAdditional = onCall(async (request) => {
+  const payload = deleteAdditionalSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  await db.doc(`stores/${payload.storeId}/additionals/${payload.additionalId}`).delete();
+  await updateEmbeddedAdditionalChoices(payload.storeId, payload.additionalId, (choices) =>
+    choices.filter((choice) => choice.id !== payload.additionalId),
+  );
+
+  return { ok: true };
+});
+
 export const createMenuItem = onCall(async (request) => {
   const payload = createMenuItemSchema.parse(request.data);
   await assertStoreAdmin(payload.storeId, request.auth);
@@ -473,12 +637,12 @@ export const createMenuItem = onCall(async (request) => {
     storeId: payload.storeId,
     categoryId: payload.categoryId,
     name: payload.name,
-    description: payload.description || "",
+    description: payload.description,
     imageUrl: payload.imageUrl,
     price: payload.price,
     isAvailable: payload.isAvailable,
     order: nextOrder,
-    optionsGroups: [],
+    optionsGroups: payload.optionsGroups,
     createdAt: now,
     updatedAt: now,
   };
@@ -510,10 +674,11 @@ export const updateMenuItem = onCall(async (request) => {
     removeUndefined({
       categoryId: payload.categoryId,
       name: payload.name,
-      description: payload.description || "",
+      description: payload.description,
       imageUrl: payload.imageUrl,
       price: payload.price,
       isAvailable: payload.isAvailable,
+      optionsGroups: payload.optionsGroups,
       updatedAt: now,
     }),
     { merge: true },

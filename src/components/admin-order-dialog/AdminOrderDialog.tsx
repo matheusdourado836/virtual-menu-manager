@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MenuItemDialog } from "@/components/menu-item-dialog/MenuItemDialog";
 import { createCartLine, getCartSubtotal, getLineTotal } from "@/features/cart/cart-utils";
 import { createAdminOrder, createTable } from "@/lib/services/store-service";
+import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import type { CartLine, CartSelectedOption, MenuItem, PaymentMethod, StoreBundle, Table } from "@/types/menu";
 import "./admin-order-dialog.scss";
@@ -69,7 +70,12 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
   const toggleOption = (item: MenuItem, groupId: string, choiceId: string, maxSelected: number) => {
     const current = selectedOptions[item.id] || [];
     const group = item.optionsGroups.find((candidate) => candidate.id === groupId);
-    const groupChoiceIds = group?.choices.map((choice) => choice.id) || [];
+
+    if (!group) {
+      return;
+    }
+
+    const groupChoiceIds = group.choices.map((choice) => choice.id);
     const selectedInGroup = current.filter((candidate) => groupChoiceIds.includes(candidate));
     const next = current.includes(choiceId)
       ? current.filter((candidate) => candidate !== choiceId)
@@ -147,6 +153,11 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
 
   const submitOrder = async () => {
     if (!canSubmit) {
+      return;
+    }
+
+    if (destinationType === "person" && customerPhone.trim() && !isValidBrazilianPhone(customerPhone)) {
+      setError("Informe um telefone válido com DDD.");
       return;
     }
 
@@ -287,12 +298,13 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
               {destinationType === "person" ? (
                 <div className="admin-order-dialog__fields">
                   <label className="admin-order-dialog__field">
-                    <span>Nome</span>
+                    <span>Nome *</span>
                     <input
                       className="admin-order-dialog__control"
                       value={customerName}
                       onChange={(event) => setCustomerName(event.target.value)}
                       placeholder="Nome do cliente"
+                      required
                     />
                   </label>
                   <label className="admin-order-dialog__field">
@@ -300,20 +312,24 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
                     <input
                       className="admin-order-dialog__control"
                       value={customerPhone}
-                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      onChange={(event) => setCustomerPhone(formatPhoneInput(event.target.value))}
                       placeholder="(00) 00000-0000"
+                      type="tel"
                       inputMode="tel"
+                      autoComplete="tel"
+                      maxLength={15}
                     />
                   </label>
                 </div>
               ) : (
                 <div className="admin-order-dialog__fields">
                   <label className="admin-order-dialog__field">
-                    <span>Mesa</span>
+                    <span>Mesa *</span>
                     <select
                       className="admin-order-dialog__control"
                       value={selectedTableId}
                       onChange={(event) => setSelectedTableId(event.target.value)}
+                      required
                     >
                       <option value="">Selecione uma mesa</option>
                       {tables.map((table) => (
@@ -326,12 +342,16 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
                   </label>
                   {selectedTableId === "create-table" ? (
                     <div className="admin-order-dialog__new-table">
-                      <input
-                        className="admin-order-dialog__control"
-                        value={newTableLabel}
-                        onChange={(event) => setNewTableLabel(event.target.value)}
-                        placeholder="Ex.: Mesa 08"
-                      />
+                      <label className="admin-order-dialog__field">
+                        <span>Nome da mesa *</span>
+                        <input
+                          className="admin-order-dialog__control"
+                          value={newTableLabel}
+                          onChange={(event) => setNewTableLabel(event.target.value)}
+                          placeholder="Ex.: Mesa 08"
+                          required
+                        />
+                      </label>
                       <button
                         className="admin-order-dialog__secondary-action"
                         type="button"
@@ -349,11 +369,12 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
             <section className="admin-order-dialog__section">
               <h3 className="admin-order-dialog__section-title">Pagamento</h3>
               <label className="admin-order-dialog__field">
-                <span>Forma de pagamento</span>
+                <span>Forma de pagamento *</span>
                 <select
                   className="admin-order-dialog__control"
                   value={paymentMethod}
                   onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+                  required
                 >
                   <option value="pay_on_pickup">Pagar na retirada</option>
                   <option value="pix_on_pickup">Pix na retirada</option>

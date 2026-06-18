@@ -2,8 +2,9 @@
 
 import { Clock3, Eye, ImagePlus, Loader2, Palette, Save, Store as StoreIcon, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type FormEvent } from "react";
 import { updateStoreSettings, uploadStoreAsset } from "@/lib/services/store-service";
+import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import {
   deriveStoreThemeColors,
@@ -251,7 +252,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
   const [form, setForm] = useState<StoreSettingsForm>({
     name: store.name,
     description: store.description,
-    phone: store.phone || "",
+    phone: formatPhoneInput(store.phone || ""),
     address: store.address || "",
     pausedMessage: store.pausedMessage,
     isActive: store.isActive,
@@ -269,13 +270,16 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState("");
+  const [draggingAsset, setDraggingAsset] = useState<"logo" | "banner" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isExtractingPalette, setIsExtractingPalette] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [error, setError] = useState("");
 
-  const logoDisplayUrl = logoPreviewUrl || form.logoUrl || "/placeholder-logo.svg";
-  const bannerDisplayUrl = bannerPreviewUrl || form.bannerUrl || "/placeholder-banner.svg";
+  const logoDisplayUrl = logoPreviewUrl || form.logoUrl;
+  const bannerDisplayUrl = bannerPreviewUrl || form.bannerUrl;
+  const previewLogoUrl = logoDisplayUrl || "/placeholder-logo.svg";
+  const previewBannerUrl = bannerDisplayUrl || "/placeholder-banner.svg";
   const derivedThemeColors = useMemo(
     () => deriveStoreThemeColors(form.primaryColor, form.secondaryColor),
     [form.primaryColor, form.secondaryColor],
@@ -293,7 +297,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
       .map((item) => ({
         id: item.id,
         name: item.name,
-        description: item.description || "Preparado na hora.",
+        description: item.description,
         price: item.price,
         imageUrl: item.imageUrl || "/placeholder-item.svg",
       }));
@@ -403,6 +407,50 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
     setBannerPreviewUrl(previewUrl);
   };
 
+  const removeImageAsset = (assetType: "logo" | "banner") => {
+    if (isSaving) {
+      return;
+    }
+
+    setDraggingAsset(null);
+    setError("");
+
+    if (assetType === "logo") {
+      setLogoFile(null);
+      setLogoPreviewUrl("");
+      updateField("logoUrl", "");
+      return;
+    }
+
+    setBannerFile(null);
+    setBannerPreviewUrl("");
+    updateField("bannerUrl", "");
+  };
+
+  const dragImageAsset = (assetType: "logo" | "banner", event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+
+    if (!isSaving) {
+      setDraggingAsset(assetType);
+    }
+  };
+
+  const leaveImageAsset = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDraggingAsset(null);
+  };
+
+  const dropImageAsset = (assetType: "logo" | "banner", event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDraggingAsset(null);
+
+    if (isSaving) {
+      return;
+    }
+
+    void selectImageFile(assetType, event.dataTransfer.files[0]);
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -413,6 +461,11 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
 
     if (!form.name.trim() || Number.isNaN(borderRadius)) {
       setError("Informe o nome da loja antes de salvar.");
+      return;
+    }
+
+    if (form.phone.trim() && !isValidBrazilianPhone(form.phone)) {
+      setError("Informe um telefone válido com DDD.");
       return;
     }
 
@@ -488,7 +541,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
           </div>
 
           <label className="store-settings__field">
-            <span className="store-settings__label">Nome</span>
+            <span className="store-settings__label">Nome *</span>
             <input
               className="store-settings__control"
               value={form.name}
@@ -513,8 +566,11 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
               <input
                 className="store-settings__control"
                 value={form.phone}
-                onChange={(event) => updateField("phone", event.target.value)}
+                onChange={(event) => updateField("phone", formatPhoneInput(event.target.value))}
+                type="tel"
                 inputMode="tel"
+                autoComplete="tel"
+                maxLength={15}
               />
             </label>
 
@@ -538,12 +594,23 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
           <div className="store-settings__uploads">
             <label className="store-settings__upload-field">
               <span className="store-settings__label">Logo</span>
-              <span className="store-settings__upload store-settings__upload--logo">
+              <span
+                className={`store-settings__upload store-settings__upload--logo${
+                  draggingAsset === "logo" ? " store-settings__upload--dragging" : ""
+                }`}
+                onDragEnter={(event) => dragImageAsset("logo", event)}
+                onDragOver={(event) => dragImageAsset("logo", event)}
+                onDragLeave={leaveImageAsset}
+                onDrop={(event) => dropImageAsset("logo", event)}
+              >
                 <input
                   className="store-settings__file-input"
                   type="file"
                   accept="image/*"
-                  onChange={(event) => void selectImageFile("logo", event.target.files?.[0])}
+                  onChange={(event) => {
+                    void selectImageFile("logo", event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
                   disabled={isSaving}
                 />
                 {logoDisplayUrl ? (
@@ -561,17 +628,44 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                     Selecionar
                   </span>
                 )}
+                {logoDisplayUrl ? (
+                  <button
+                    className="store-settings__remove-image"
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      removeImageAsset("logo");
+                    }}
+                    disabled={isSaving}
+                    aria-label="Remover logo"
+                    title="Remover logo"
+                  >
+                    <X size={16} aria-hidden />
+                  </button>
+                ) : null}
               </span>
             </label>
 
             <label className="store-settings__upload-field">
               <span className="store-settings__label">Banner</span>
-              <span className="store-settings__upload store-settings__upload--banner">
+              <span
+                className={`store-settings__upload store-settings__upload--banner${
+                  draggingAsset === "banner" ? " store-settings__upload--dragging" : ""
+                }`}
+                onDragEnter={(event) => dragImageAsset("banner", event)}
+                onDragOver={(event) => dragImageAsset("banner", event)}
+                onDragLeave={leaveImageAsset}
+                onDrop={(event) => dropImageAsset("banner", event)}
+              >
                 <input
                   className="store-settings__file-input"
                   type="file"
                   accept="image/*"
-                  onChange={(event) => void selectImageFile("banner", event.target.files?.[0])}
+                  onChange={(event) => {
+                    void selectImageFile("banner", event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
                   disabled={isSaving}
                 />
                 {bannerDisplayUrl ? (
@@ -589,6 +683,22 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                     Selecionar banner
                   </span>
                 )}
+                {bannerDisplayUrl ? (
+                  <button
+                    className="store-settings__remove-image"
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      removeImageAsset("banner");
+                    }}
+                    disabled={isSaving}
+                    aria-label="Remover banner"
+                    title="Remover banner"
+                  >
+                    <X size={16} aria-hidden />
+                  </button>
+                ) : null}
               </span>
             </label>
           </div>
@@ -624,6 +734,8 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                       type="time"
                       value={day.opensAt}
                       onChange={(event) => updateOpeningDay(day.id, { opensAt: event.target.value })}
+                      aria-label={`Horário de abertura de ${day.label}`}
+                      required={day.isOpen}
                     />
                     <span className="store-settings__time-separator">até</span>
                     <input
@@ -631,6 +743,8 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                       type="time"
                       value={day.closesAt}
                       onChange={(event) => updateOpeningDay(day.id, { closesAt: event.target.value })}
+                      aria-label={`Horário de fechamento de ${day.label}`}
+                      required={day.isOpen}
                     />
                   </div>
                 ) : (
@@ -689,12 +803,13 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
           <div className="store-settings__colors">
             {colorFields.map(([field, label]) => (
               <label className="store-settings__color-field" key={field}>
-                <span className="store-settings__label">{label}</span>
+                <span className="store-settings__label">{label} *</span>
                 <input
                   className="store-settings__color-control"
                   type="color"
                   value={form[field]}
                   onChange={(event) => updateField(field, event.target.value)}
+                  required
                 />
               </label>
             ))}
@@ -758,7 +873,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                   <div className="store-settings__phone-banner">
                     <Image
                       className="store-settings__phone-banner-image"
-                      src={bannerDisplayUrl}
+                      src={previewBannerUrl}
                       alt=""
                       width={360}
                       height={160}
@@ -767,7 +882,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
                   </div>
 
                   <div className="store-settings__phone-brand">
-                    <Image className="store-settings__phone-logo" src={logoDisplayUrl} alt="" width={56} height={56} unoptimized />
+                    <Image className="store-settings__phone-logo" src={previewLogoUrl} alt="" width={56} height={56} unoptimized />
                     <span className="store-settings__phone-brand-copy">
                       <small className="store-settings__phone-eyebrow">Cardápio digital</small>
                       <strong className="store-settings__phone-title">{form.name || "Nome da loja"}</strong>

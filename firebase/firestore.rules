@@ -64,6 +64,11 @@ service cloud.firestore {
         allow write: if isStoreAdmin(storeId);
       }
 
+      match /additionals/{additionalId} {
+        allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
+        allow write: if isStoreAdmin(storeId);
+      }
+
       match /menuItems/{itemId} {
         allow read: if isPublicStore(storeId) || isStoreAdmin(storeId);
         allow write: if isStoreAdmin(storeId);

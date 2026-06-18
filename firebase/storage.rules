@@ -36,12 +36,14 @@ service firebase.storage {
 
     match /stores/{storeId}/public/menu-items/{allPaths=**} {
       allow read: if true;
-      allow write: if isStoreAdmin(storeId) && isImageUpload();
+      allow create, update: if isStoreAdmin(storeId) && isImageUpload();
+      allow delete: if isStoreAdmin(storeId);
     }
 
     match /stores/{storeId}/public/settings/{allPaths=**} {
       allow read: if true;
-      allow write: if isStoreAdmin(storeId) && isImageUpload();
+      allow create, update: if isStoreAdmin(storeId) && isImageUpload();
+      allow delete: if isStoreAdmin(storeId);
     }
 
     match /stores/{storeId}/public/{allPaths=**} {

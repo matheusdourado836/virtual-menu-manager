@@ -13,8 +13,6 @@ export const paymentStatusLabels: Record<PaymentStatus, string> = {
   cancelled: "Cancelado",
 };
 
-export const getPaymentMethodLabel = (paymentMethod?: PaymentMethod) =>
-  paymentMethod ? paymentMethodLabels[paymentMethod] || "Não informado" : "Não informado";
+export const getPaymentMethodLabel = (paymentMethod: PaymentMethod) => paymentMethodLabels[paymentMethod];
 
-export const getPaymentStatusLabel = (paymentStatus?: PaymentStatus) =>
-  paymentStatus ? paymentStatusLabels[paymentStatus] || "Não informado" : "Não informado";
+export const getPaymentStatusLabel = (paymentStatus: PaymentStatus) => paymentStatusLabels[paymentStatus];

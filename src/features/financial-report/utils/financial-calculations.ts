@@ -141,7 +141,7 @@ const getTimeBucket = (order: Order, groupBy: FinancialGroupBy) => {
 };
 
 const buildPaymentBreakdown = (sales: Order[], grossRevenue: number): PaymentBreakdownItem[] => {
-  const rows = new Map<PaymentMethod | "unknown", PaymentBreakdownItem>();
+  const rows = new Map<PaymentMethod, PaymentBreakdownItem>();
 
   paymentMethods.forEach((paymentMethod) => {
     rows.set(paymentMethod, {
@@ -154,20 +154,15 @@ const buildPaymentBreakdown = (sales: Order[], grossRevenue: number): PaymentBre
   });
 
   sales.forEach((order) => {
-    const key = order.paymentMethod || "unknown";
-    const current =
-      rows.get(key) ||
-      ({
-        paymentMethod: "unknown",
-        label: "Não informado",
-        orders: 0,
-        total: 0,
-        percentage: 0,
-      } satisfies PaymentBreakdownItem);
+    const current = rows.get(order.paymentMethod);
+
+    if (!current) {
+      return;
+    }
 
     current.orders += 1;
-    current.total += Number(order.total || 0);
-    rows.set(key, current);
+    current.total += Number(order.total);
+    rows.set(order.paymentMethod, current);
   });
 
   return Array.from(rows.values()).map((row) => ({
@@ -189,7 +184,7 @@ const buildSalesByTime = (sales: Order[], groupBy: FinancialGroupBy): TimeSalesB
     };
 
     current.orders += 1;
-    current.total += Number(order.total || 0);
+    current.total += Number(order.total);
     buckets.set(bucket.key, current);
   });
 
@@ -231,13 +226,13 @@ export const calculateFinancialReport = (
   const filteredOrders = filterOrders(orders, filters);
   const sales = filteredOrders.filter(isValidSale);
   const cancelledOrders = filteredOrders.filter((order) => order.status === "cancelled");
-  const grossRevenue = sales.reduce((total, order) => total + Number(order.total || 0), 0);
+  const grossRevenue = sales.reduce((total, order) => total + Number(order.total), 0);
   const finalizedOrders = sales.length;
   const soldItems = sales.reduce(
     (total, order) => total + order.items.reduce((itemTotal, item) => itemTotal + item.quantity, 0),
     0,
   );
-  const cancelledValue = cancelledOrders.reduce((total, order) => total + Number(order.total || 0), 0);
+  const cancelledValue = cancelledOrders.reduce((total, order) => total + Number(order.total), 0);
   const salesByTime = buildSalesByTime(sales, groupBy);
   const topProducts = buildTopProducts(sales, grossRevenue);
   const bestSalesTime = [...salesByTime].sort((left, right) => right.total - left.total || right.orders - left.orders)[0];

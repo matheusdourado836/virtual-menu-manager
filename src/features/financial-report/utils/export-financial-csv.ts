@@ -29,7 +29,6 @@ export const downloadFinancialCsv = (orders: Order[], filename: string) => {
     "Itens",
     "Subtotal",
     "Taxa de serviço",
-    "Desconto",
     "Total",
     "Motivo do cancelamento",
   ];
@@ -37,17 +36,16 @@ export const downloadFinancialCsv = (orders: Order[], filename: string) => {
   const rows = orders.map((order) => [
     order.code,
     formatDateTime(order.createdAt),
-    order.customerName || "Não informado",
-    order.tableLabel || "Balcão",
+    order.customerName,
+    order.tableLabel ?? "",
     statusLabels[order.status],
     getPaymentMethodLabel(order.paymentMethod),
     getPaymentStatusLabel(order.paymentStatus),
     summarizeItems(order),
-    formatCurrency(Number(order.subtotal || 0)),
-    formatCurrency(Number(order.serviceFee || 0)),
-    formatCurrency(Number((order as { discount?: number }).discount || 0)),
-    formatCurrency(Number(order.total || 0)),
-    order.cancelReason || "Não informado",
+    formatCurrency(Number(order.subtotal)),
+    formatCurrency(Number(order.serviceFee)),
+    formatCurrency(Number(order.total)),
+    order.cancelReason ?? "",
   ]);
 
   const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(";")).join("\n");

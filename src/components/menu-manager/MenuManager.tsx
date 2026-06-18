@@ -1,23 +1,29 @@
 "use client";
 
-import { ChevronDown, Loader2, Pencil, Plus, Trash2, ToggleLeft, ToggleRight, X } from "lucide-react";
+import { ChevronDown, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
+import { AdditionalEditorDialog } from "@/components/additional-editor-dialog/AdditionalEditorDialog";
 import { MenuItemEditorDialog } from "@/components/menu-item-editor-dialog/MenuItemEditorDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import {
+  createAdditional,
   createCategory,
   createMenuItem,
+  deleteAdditional,
   deleteMenuItem,
+  updateAdditional,
   updateMenuItem,
+  type AdditionalInput,
   type MenuItemInput,
 } from "@/lib/services/store-service";
 import { formatCurrency } from "@/lib/utils/money";
-import type { Category, MenuItem } from "@/types/menu";
+import type { Additional, Category, MenuItem } from "@/types/menu";
 import "./menu-manager.scss";
 
 interface MenuManagerProps {
   storeId: string;
   categories: Category[];
+  additionals: Additional[];
   menuItems: MenuItem[];
   onChanged: () => void | Promise<void>;
   onFeedback: (message: string, variant?: "success" | "error" | "info") => void;
@@ -27,12 +33,20 @@ export interface MenuManagerHandle {
   openCreateItem: () => void;
 }
 
+type MenuManagerSection = "items" | "additionals";
+
 function MenuManagerComponent(
-  { storeId, categories, menuItems, onChanged, onFeedback }: MenuManagerProps,
+  { storeId, categories, additionals, menuItems, onChanged, onFeedback }: MenuManagerProps,
   ref: ForwardedRef<MenuManagerHandle>,
 ) {
   const [newCategory, setNewCategory] = useState("");
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [isCreatingAdditional, setIsCreatingAdditional] = useState(false);
+  const [editingAdditional, setEditingAdditional] = useState<Additional | null>(null);
+  const [additionalToDelete, setAdditionalToDelete] = useState<Additional | null>(null);
+  const [isSavingAdditional, setIsSavingAdditional] = useState(false);
+  const [deletingAdditionalId, setDeletingAdditionalId] = useState("");
+  const [activeSection, setActiveSection] = useState<MenuManagerSection>("items");
   const [isCreatingItem, setIsCreatingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
@@ -53,7 +67,18 @@ function MenuManagerComponent(
       })),
     [activeCategories, menuItems],
   );
+  const sortedAdditionals = useMemo(
+    () =>
+      additionals
+        .map((additional, index) => ({
+          ...additional,
+          order: Number.isFinite(additional.order) ? additional.order : index + 1,
+        }))
+        .sort((first, second) => first.order - second.order || first.name.localeCompare(second.name)),
+    [additionals],
+  );
   const isEditorOpen = isCreatingItem || Boolean(editingItem);
+  const isAdditionalEditorOpen = isCreatingAdditional || Boolean(editingAdditional);
   const selectableItemsCount = useMemo(
     () =>
       categoryToReceiveItems
@@ -73,10 +98,12 @@ function MenuManagerComponent(
     imageUrl: item.imageUrl,
     price: item.price,
     isAvailable: item.isAvailable,
+    optionsGroups: item.optionsGroups,
   });
 
   useImperativeHandle(ref, () => ({
     openCreateItem: () => {
+      setActiveSection("items");
       setEditingItem(null);
       setIsCreatingItem(true);
     },
@@ -133,17 +160,59 @@ function MenuManagerComponent(
     return category;
   };
 
-  const toggleItem = async (item: MenuItem) => {
-    setSavingItemId(item.id);
+  const saveAdditional = async (payload: AdditionalInput) => {
+    setIsSavingAdditional(true);
 
     try {
-      await updateMenuItem(storeId, item.id, { ...getItemPayload(item), isAvailable: !item.isAvailable });
+      if (editingAdditional) {
+        await updateAdditional(storeId, editingAdditional.id, payload);
+        onFeedback("Adicional atualizado.");
+      } else {
+        await createAdditional(storeId, payload);
+        onFeedback("Adicional criado.");
+      }
+
       await onChanged();
-      onFeedback(item.isAvailable ? "Item marcado como indisponível." : "Item marcado como disponível.");
+      setIsCreatingAdditional(false);
+      setEditingAdditional(null);
     } catch (error) {
-      onFeedback(error instanceof Error ? error.message : "Não foi possível alterar a disponibilidade.", "error");
+      onFeedback(error instanceof Error ? error.message : "Não foi possível salvar o adicional.", "error");
+      throw error;
     } finally {
-      setSavingItemId("");
+      setIsSavingAdditional(false);
+    }
+  };
+
+  const openCreateAdditional = () => {
+    setEditingAdditional(null);
+    setIsCreatingAdditional(true);
+  };
+
+  const startEditingAdditional = (additional: Additional) => {
+    setEditingAdditional(additional);
+    setIsCreatingAdditional(false);
+  };
+
+  const confirmDeleteAdditional = async () => {
+    if (!additionalToDelete) {
+      return;
+    }
+
+    setDeletingAdditionalId(additionalToDelete.id);
+
+    try {
+      await deleteAdditional(storeId, additionalToDelete.id);
+      await onChanged();
+      onFeedback("Adicional excluído dos itens.");
+      setAdditionalToDelete(null);
+
+      if (editingAdditional?.id === additionalToDelete.id) {
+        setEditingAdditional(null);
+      }
+    } catch (error) {
+      onFeedback(error instanceof Error ? error.message : "Não foi possível excluir o adicional.", "error");
+    } finally {
+      setDeletingAdditionalId("");
     }
   };
 
@@ -227,134 +296,218 @@ function MenuManagerComponent(
 
   return (
     <section className="menu-manager">
-      <div className="menu-manager__toolbar">
-        <div className="menu-manager__form">
-          <label className="menu-manager__field">
-            <span className="menu-manager__label">Nova categoria</span>
-            <input
-              className="menu-manager__control"
-              value={newCategory}
-              onChange={(event) => setNewCategory(event.target.value)}
-              placeholder="Ex.: Sobremesas"
-            />
-          </label>
-          <button className="menu-manager__button" type="button" onClick={addCategory} disabled={isCreatingCategory}>
-            {isCreatingCategory ? <Loader2 className="menu-manager__spinner" size={17} aria-hidden /> : <Plus size={18} aria-hidden />}
-            {isCreatingCategory ? "Criando" : "Criar categoria"}
-          </button>
-        </div>
+      <nav className="menu-manager__tabs" role="tablist" aria-label="Gerenciar cardápio">
+        <button
+          className={`menu-manager__tab${activeSection === "items" ? " menu-manager__tab--active" : ""}`}
+          type="button"
+          role="tab"
+          id="menu-manager-tab-items"
+          aria-selected={activeSection === "items"}
+          aria-controls="menu-manager-panel-items"
+          onClick={() => setActiveSection("items")}
+        >
+          Itens
+          <span className="menu-manager__tab-count">{menuItems.length}</span>
+        </button>
+        <button
+          className={`menu-manager__tab${activeSection === "additionals" ? " menu-manager__tab--active" : ""}`}
+          type="button"
+          role="tab"
+          id="menu-manager-tab-additionals"
+          aria-selected={activeSection === "additionals"}
+          aria-controls="menu-manager-panel-additionals"
+          onClick={() => setActiveSection("additionals")}
+        >
+          Adicionais
+          <span className="menu-manager__tab-count">{sortedAdditionals.length}</span>
+        </button>
+      </nav>
 
-      </div>
-
-      <div className="menu-manager__categories">
-        {groupedItems.map(({ category, items }) => (
-          <section className="menu-manager__category" key={category.id}>
-            <div className="menu-manager__category-header">
-              <span className="menu-manager__category-copy">
-                <strong className="menu-manager__category-title">{category.name}</strong>
-                <span className="menu-manager__category-count">{items.length} itens</span>
-              </span>
-              <span className="menu-manager__category-actions">
-                <button
-                  className="menu-manager__category-button"
-                  type="button"
-                  onClick={() => openAddItemsDialog(category)}
-                  aria-label={`Adicionar itens em ${category.name}`}
-                  title={`Adicionar itens em ${category.name}`}
-                >
-                  <Plus size={18} aria-hidden />
-                </button>
-                <button
-                  className="menu-manager__category-button"
-                  type="button"
-                  aria-expanded={!collapsedCategories[category.id]}
-                  onClick={() =>
-                    setCollapsedCategories((current) => ({
-                      ...current,
-                      [category.id]: !current[category.id],
-                    }))
-                  }
-                  aria-label={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
-                  title={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
-                >
-                  <ChevronDown
-                    className={`menu-manager__category-icon${
-                      !collapsedCategories[category.id] ? " menu-manager__category-icon--open" : ""
-                    }`}
-                    size={20}
-                    aria-hidden
-                  />
-                </button>
-              </span>
+      {activeSection === "items" ? (
+        <div
+          className="menu-manager__panel"
+          role="tabpanel"
+          id="menu-manager-panel-items"
+          aria-labelledby="menu-manager-tab-items"
+        >
+          <div className="menu-manager__toolbar">
+            <div className="menu-manager__form">
+              <label className="menu-manager__field">
+                <span className="menu-manager__label">Nova categoria *</span>
+                <input
+                  className="menu-manager__control"
+                  value={newCategory}
+                  onChange={(event) => setNewCategory(event.target.value)}
+                  placeholder="Ex.: Sobremesas"
+                  required
+                />
+              </label>
+              <button className="menu-manager__button" type="button" onClick={addCategory} disabled={isCreatingCategory}>
+                {isCreatingCategory ? <Loader2 className="menu-manager__spinner" size={17} aria-hidden /> : <Plus size={18} aria-hidden />}
+                {isCreatingCategory ? "Criando" : "Criar categoria"}
+              </button>
             </div>
-            {!collapsedCategories[category.id] ? (
-              <div className="menu-manager__items">
-                {items.map((item) => {
-                  const isSaving = savingItemId === item.id;
-                  const isDeleting = deletingItemId === item.id;
+          </div>
 
-                  return (
-                    <article
-                      className={`menu-manager__item${item.isAvailable ? "" : " menu-manager__item--disabled"}`}
-                      key={item.id}
+          <div className="menu-manager__categories">
+            {groupedItems.map(({ category, items }) => (
+              <section className="menu-manager__category" key={category.id}>
+                <div className="menu-manager__category-header">
+                  <span className="menu-manager__category-copy">
+                    <strong className="menu-manager__category-title">{category.name}</strong>
+                    <span className="menu-manager__category-count">{items.length} itens</span>
+                  </span>
+                  <span className="menu-manager__category-actions">
+                    <button
+                      className="menu-manager__category-button"
+                      type="button"
+                      onClick={() => openAddItemsDialog(category)}
+                      aria-label={`Adicionar itens em ${category.name}`}
+                      title={`Adicionar itens em ${category.name}`}
                     >
-                      <div className="menu-manager__item-copy">
-                        <strong className="menu-manager__item-name">{item.name}</strong>
-                        <span className="menu-manager__item-description">{item.description || "Sem descrição"}</span>
-                        {item.needsReview ? <em className="menu-manager__review">TODO_REVIEW</em> : null}
-                      </div>
-                      <strong className="menu-manager__price">{formatCurrency(item.price)}</strong>
-                      <div className="menu-manager__item-actions">
-                        <button
-                          className="menu-manager__icon-button"
-                          type="button"
-                          onClick={() => setEditingItem(item)}
-                          disabled={isSaving || isDeleting}
-                          aria-label={`Editar ${item.name}`}
-                          title={`Editar ${item.name}`}
+                      <Plus size={18} aria-hidden />
+                    </button>
+                    <button
+                      className="menu-manager__category-button"
+                      type="button"
+                      aria-expanded={!collapsedCategories[category.id]}
+                      onClick={() =>
+                        setCollapsedCategories((current) => ({
+                          ...current,
+                          [category.id]: !current[category.id],
+                        }))
+                      }
+                      aria-label={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
+                      title={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
+                    >
+                      <ChevronDown
+                        className={`menu-manager__category-icon${
+                          !collapsedCategories[category.id] ? " menu-manager__category-icon--open" : ""
+                        }`}
+                        size={20}
+                        aria-hidden
+                      />
+                    </button>
+                  </span>
+                </div>
+                {!collapsedCategories[category.id] ? (
+                  <div className="menu-manager__items">
+                    {items.map((item) => {
+                      const isSaving = savingItemId === item.id;
+                      const isDeleting = deletingItemId === item.id;
+
+                      return (
+                        <article
+                          className={`menu-manager__item${item.isAvailable ? "" : " menu-manager__item--disabled"}`}
+                          key={item.id}
                         >
-                          <Pencil size={18} aria-hidden />
-                        </button>
-                        <button
-                          className="menu-manager__icon-button"
-                          type="button"
-                          onClick={() => toggleItem(item)}
-                          disabled={isSaving || isDeleting}
-                          aria-label={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
-                          title={item.isAvailable ? "Marcar indisponível" : "Marcar disponível"}
-                        >
-                          {isSaving ? (
-                            <Loader2 className="menu-manager__spinner" size={18} aria-hidden />
-                          ) : item.isAvailable ? (
-                            <ToggleRight size={22} aria-hidden />
-                          ) : (
-                            <ToggleLeft size={22} aria-hidden />
-                          )}
-                        </button>
-                        <button
-                          className="menu-manager__icon-button menu-manager__icon-button--danger"
-                          type="button"
-                          onClick={() => setItemToDelete(item)}
-                          disabled={isSaving || isDeleting}
-                          aria-label={`Excluir ${item.name}`}
-                          title={`Excluir ${item.name}`}
-                        >
-                          <Trash2 size={18} aria-hidden />
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
+                          <div className="menu-manager__item-copy">
+                            <strong className="menu-manager__item-name">{item.name}</strong>
+                            <span className="menu-manager__item-description">{item.description}</span>
+                          </div>
+                          <strong className="menu-manager__price">{formatCurrency(item.price)}</strong>
+                          <div className="menu-manager__item-actions">
+                            <button
+                              className="menu-manager__icon-button"
+                              type="button"
+                              onClick={() => setEditingItem(item)}
+                              disabled={isSaving || isDeleting}
+                              aria-label={`Editar ${item.name}`}
+                              title={`Editar ${item.name}`}
+                            >
+                              <Pencil size={18} aria-hidden />
+                            </button>
+                            <button
+                              className="menu-manager__icon-button menu-manager__icon-button--danger"
+                              type="button"
+                              onClick={() => setItemToDelete(item)}
+                              disabled={isSaving || isDeleting}
+                              aria-label={`Excluir ${item.name}`}
+                              title={`Excluir ${item.name}`}
+                            >
+                              <Trash2 size={18} aria-hidden />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </section>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {activeSection === "additionals" ? (
+        <div
+          className="menu-manager__panel"
+          role="tabpanel"
+          id="menu-manager-panel-additionals"
+          aria-labelledby="menu-manager-tab-additionals"
+        >
+          <div className="menu-manager__additionals">
+            <div className="menu-manager__additionals-header">
+              <div>
+                <h2 className="menu-manager__section-title">Adicionais</h2>
+                <p className="menu-manager__section-description">
+                  Cadastre adicionais e escolha quais entram em cada item.
+                </p>
               </div>
-            ) : null}
-          </section>
-        ))}
-      </div>
+              <button className="menu-manager__primary" type="button" onClick={openCreateAdditional}>
+                <Plus size={17} aria-hidden />
+                Criar adicional
+              </button>
+            </div>
+
+            <div className="menu-manager__additional-list">
+              {sortedAdditionals.length ? (
+                sortedAdditionals.map((additional) => (
+                  <article
+                    className={`menu-manager__additional${additional.isAvailable ? "" : " menu-manager__additional--disabled"}`}
+                    key={additional.id}
+                  >
+                    <span className="menu-manager__additional-copy">
+                      <strong className="menu-manager__additional-name">{additional.name}</strong>
+                      <small className="menu-manager__additional-price">{formatCurrency(additional.price)}</small>
+                    </span>
+                    <span className="menu-manager__additional-buttons">
+                      <button
+                        className="menu-manager__icon-button"
+                        type="button"
+                        onClick={() => startEditingAdditional(additional)}
+                        disabled={isSavingAdditional || Boolean(deletingAdditionalId)}
+                        aria-label={`Editar ${additional.name}`}
+                        title={`Editar ${additional.name}`}
+                      >
+                        <Pencil size={18} aria-hidden />
+                      </button>
+                      <button
+                        className="menu-manager__icon-button menu-manager__icon-button--danger"
+                        type="button"
+                        onClick={() => setAdditionalToDelete(additional)}
+                        disabled={isSavingAdditional || Boolean(deletingAdditionalId)}
+                        aria-label={`Excluir ${additional.name}`}
+                        title={`Excluir ${additional.name}`}
+                      >
+                        <Trash2 size={18} aria-hidden />
+                      </button>
+                    </span>
+                  </article>
+                ))
+              ) : (
+                <p className="menu-manager__empty-text">Nenhum adicional cadastrado.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isEditorOpen ? (
         <MenuItemEditorDialog
           storeId={storeId}
           categories={activeCategories}
+          additionals={sortedAdditionals}
           item={editingItem || undefined}
           isSaving={Boolean(savingItemId)}
           onClose={() => {
@@ -365,6 +518,20 @@ function MenuManagerComponent(
           }}
           onSubmit={saveItem}
           onCreateCategory={createCategoryFromEditor}
+        />
+      ) : null}
+
+      {isAdditionalEditorOpen ? (
+        <AdditionalEditorDialog
+          additional={editingAdditional || undefined}
+          isSaving={isSavingAdditional}
+          onClose={() => {
+            if (!isSavingAdditional) {
+              setIsCreatingAdditional(false);
+              setEditingAdditional(null);
+            }
+          }}
+          onSubmit={saveAdditional}
         />
       ) : null}
 
@@ -472,6 +639,21 @@ function MenuManagerComponent(
             </footer>
           </section>
         </div>
+      ) : null}
+
+      {additionalToDelete ? (
+        <ConfirmDialog
+          title="Excluir adicional?"
+          description={`"${additionalToDelete.name}" será removido do cadastro e dos itens que usam este adicional.`}
+          confirmLabel="Excluir adicional"
+          isLoading={deletingAdditionalId === additionalToDelete.id}
+          onCancel={() => {
+            if (!deletingAdditionalId) {
+              setAdditionalToDelete(null);
+            }
+          }}
+          onConfirm={confirmDeleteAdditional}
+        />
       ) : null}
 
       {itemToDelete ? (
