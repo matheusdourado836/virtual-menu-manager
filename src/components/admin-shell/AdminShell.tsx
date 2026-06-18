@@ -9,6 +9,7 @@ import {
   Coffee,
   History,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Palette,
   Plus,
@@ -18,7 +19,7 @@ import {
   Store,
   Utensils,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
 import { OrdersBoard } from "@/components/orders-board/OrdersBoard";
@@ -92,6 +93,7 @@ export function AdminShell({ slug }: AdminShellProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState<"email" | "google" | null>(null);
   const [loadError, setLoadError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -182,8 +184,16 @@ export function AdminShell({ slug }: AdminShellProps) {
     };
   }, [isAuthReady, slug, user]);
 
-  useEffect(() => {
+  const isAuthorized = useMemo(() => {
     if (!bundle) {
+      return false;
+    }
+
+    return canManageStore(user ? { uid: user.uid, claims } : null, bundle.store);
+  }, [bundle, claims, user]);
+
+  useEffect(() => {
+    if (!bundle || !user || !isAuthorized) {
       return undefined;
     }
 
@@ -196,33 +206,41 @@ export function AdminShell({ slug }: AdminShellProps) {
         variant: "error",
       });
     });
-  }, [bundle, handleOrdersChange]);
+  }, [bundle, handleOrdersChange, isAuthorized, user]);
 
-  const isAuthorized = useMemo(() => {
-    if (!bundle) {
-      return false;
+  const submitEmailLogin = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+
+    if (authLoading) {
+      return;
     }
 
-    return canManageStore(user ? { uid: user.uid, claims } : null, bundle.store);
-  }, [bundle, claims, user]);
-
-  const submitEmailLogin = async () => {
     setAuthError("");
+    setAuthLoading("email");
 
     try {
       await signInWithEmailAndPassword(firebaseAuth, email, password);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Falha no login.");
+    } finally {
+      setAuthLoading(null);
     }
   };
 
   const submitGoogleLogin = async () => {
+    if (authLoading) {
+      return;
+    }
+
     setAuthError("");
+    setAuthLoading("google");
 
     try {
       await signInWithPopup(firebaseAuth, googleProvider);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Falha no login com Google.");
+    } finally {
+      setAuthLoading(null);
     }
   };
 
@@ -316,7 +334,7 @@ export function AdminShell({ slug }: AdminShellProps) {
     return (
       <ThemeScope theme={bundle?.theme || fallbackAdminTheme}>
         <main className="admin-shell admin-shell--locked">
-          <section className="admin-shell__login">
+          <form className="admin-shell__login" onSubmit={submitEmailLogin} aria-busy={Boolean(authLoading)}>
             <Coffee size={32} aria-hidden />
             <h1 className="admin-shell__login-title">Entrar no painel</h1>
             {loadError ? <p className="admin-shell__error">{loadError}</p> : null}
@@ -327,6 +345,9 @@ export function AdminShell({ slug }: AdminShellProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 type="email"
+                autoComplete="email"
+                disabled={Boolean(authLoading)}
+                required
               />
             </label>
             <label className="admin-shell__field">
@@ -336,16 +357,21 @@ export function AdminShell({ slug }: AdminShellProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
+                autoComplete="current-password"
+                disabled={Boolean(authLoading)}
+                required
               />
             </label>
             {authError ? <p className="admin-shell__error">{authError}</p> : null}
-            <button className="admin-shell__primary" type="button" onClick={submitEmailLogin}>
-              Entrar
+            <button className="admin-shell__primary" type="submit" disabled={Boolean(authLoading)}>
+              {authLoading === "email" ? <Loader2 className="admin-shell__spinner" size={17} aria-hidden /> : null}
+              {authLoading === "email" ? "Entrando" : "Entrar"}
             </button>
-            <button className="admin-shell__secondary" type="button" onClick={submitGoogleLogin}>
-              Entrar com Google
+            <button className="admin-shell__secondary" type="button" onClick={submitGoogleLogin} disabled={Boolean(authLoading)}>
+              {authLoading === "google" ? <Loader2 className="admin-shell__spinner" size={17} aria-hidden /> : null}
+              {authLoading === "google" ? "Conectando" : "Entrar com Google"}
             </button>
-          </section>
+          </form>
         </main>
       </ThemeScope>
     );
@@ -541,7 +567,14 @@ export function AdminShell({ slug }: AdminShellProps) {
               <FinancialReport storeId={bundle.store.id} tables={bundle.tables} />
             ) : null}
             {activeTab === "settings" ? (
-              <StoreSettings store={bundle.store} theme={bundle.theme} onSaved={refreshBundle} onFeedback={showFeedback} />
+              <StoreSettings
+                store={bundle.store}
+                theme={bundle.theme}
+                categories={bundle.categories}
+                menuItems={bundle.menuItems}
+                onSaved={refreshBundle}
+                onFeedback={showFeedback}
+              />
             ) : null}
           </div>
         </section>

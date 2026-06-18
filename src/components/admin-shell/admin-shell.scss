@@ -34,6 +34,7 @@
     grid-template-columns: minmax(0, 1fr);
     place-items: center;
     padding: var(--space-4);
+    background: var(--color-background);
   }
 
   &__sidebar {
@@ -45,8 +46,12 @@
     background: var(--admin-color-sidebar);
 
     @include respond-to(desktop) {
-      position: sticky;
+      position: fixed;
       top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: calc(var(--z-dialog) - 1);
+      width: var(--admin-sidebar-width);
       height: var(--viewport-height);
       overflow-y: auto;
     }
@@ -213,6 +218,10 @@
 
     @include respond-to(tablet) {
       padding: var(--space-8);
+    }
+
+    @include respond-to(desktop) {
+      grid-column: 2;
     }
   }
 
@@ -404,6 +413,11 @@
     color: var(--color-text);
     background: var(--color-surface);
     padding: 0 var(--space-3);
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
   }
 
   &__primary {
@@ -415,6 +429,18 @@
 
   &__secondary {
     justify-content: center;
+  }
+
+  &__primary,
+  &__secondary {
+    &:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+  }
+
+  &__spinner {
+    animation: admin-shell-spin var(--duration-normal) linear infinite;
   }
 
   &__error {
@@ -432,5 +458,15 @@
     &__new-order {
       transition: none;
     }
+
+    &__spinner {
+      animation: none;
+    }
+  }
+}
+
+@keyframes admin-shell-spin {
+  to {
+    transform: rotate(1turn);
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Loader2, Pencil, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { ChevronDown, Loader2, Pencil, Plus, Trash2, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
 import { MenuItemEditorDialog } from "@/components/menu-item-editor-dialog/MenuItemEditorDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
@@ -39,6 +39,10 @@ function MenuManagerComponent(
   const [savingItemId, setSavingItemId] = useState("");
   const [deletingItemId, setDeletingItemId] = useState("");
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [categoryToReceiveItems, setCategoryToReceiveItems] = useState<Category | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [isMovingItems, setIsMovingItems] = useState(false);
+  const [moveItemsError, setMoveItemsError] = useState("");
 
   const activeCategories = useMemo(() => categories.filter((category) => category.isActive), [categories]);
   const groupedItems = useMemo(
@@ -50,6 +54,26 @@ function MenuManagerComponent(
     [activeCategories, menuItems],
   );
   const isEditorOpen = isCreatingItem || Boolean(editingItem);
+  const selectableItemsCount = useMemo(
+    () =>
+      categoryToReceiveItems
+        ? groupedItems.reduce(
+            (total, group) =>
+              total + group.items.filter((item) => item.categoryId !== categoryToReceiveItems.id).length,
+            0,
+          )
+        : 0,
+    [categoryToReceiveItems, groupedItems],
+  );
+
+  const getItemPayload = (item: MenuItem, categoryId = item.categoryId): MenuItemInput => ({
+    categoryId,
+    name: item.name,
+    description: item.description,
+    imageUrl: item.imageUrl,
+    price: item.price,
+    isAvailable: item.isAvailable,
+  });
 
   useImperativeHandle(ref, () => ({
     openCreateItem: () => {
@@ -113,20 +137,72 @@ function MenuManagerComponent(
     setSavingItemId(item.id);
 
     try {
-      await updateMenuItem(storeId, item.id, {
-        categoryId: item.categoryId,
-        name: item.name,
-        description: item.description,
-        imageUrl: item.imageUrl,
-        price: item.price,
-        isAvailable: !item.isAvailable,
-      });
+      await updateMenuItem(storeId, item.id, { ...getItemPayload(item), isAvailable: !item.isAvailable });
       await onChanged();
       onFeedback(item.isAvailable ? "Item marcado como indisponível." : "Item marcado como disponível.");
     } catch (error) {
       onFeedback(error instanceof Error ? error.message : "Não foi possível alterar a disponibilidade.", "error");
     } finally {
       setSavingItemId("");
+    }
+  };
+
+  const openAddItemsDialog = (category: Category) => {
+    setCategoryToReceiveItems(category);
+    setSelectedItemIds([]);
+    setMoveItemsError("");
+  };
+
+  const closeAddItemsDialog = () => {
+    if (isMovingItems) {
+      return;
+    }
+
+    setCategoryToReceiveItems(null);
+    setSelectedItemIds([]);
+    setMoveItemsError("");
+  };
+
+  const toggleSelectedItem = (itemId: string) => {
+    setSelectedItemIds((current) =>
+      current.includes(itemId) ? current.filter((currentItemId) => currentItemId !== itemId) : [...current, itemId],
+    );
+    setMoveItemsError("");
+  };
+
+  const moveSelectedItemsToCategory = async () => {
+    if (!categoryToReceiveItems) {
+      return;
+    }
+
+    const selectedItems = menuItems.filter((item) => selectedItemIds.includes(item.id));
+
+    if (!selectedItems.length) {
+      setMoveItemsError("Selecione pelo menos um item para adicionar.");
+      return;
+    }
+
+    setIsMovingItems(true);
+    setMoveItemsError("");
+
+    try {
+      await Promise.all(
+        selectedItems.map((item) =>
+          updateMenuItem(storeId, item.id, getItemPayload(item, categoryToReceiveItems.id)),
+        ),
+      );
+      await onChanged();
+      onFeedback(
+        `${selectedItems.length} ${selectedItems.length === 1 ? "item adicionado" : "itens adicionados"} em ${categoryToReceiveItems.name}.`,
+      );
+      setCategoryToReceiveItems(null);
+      setSelectedItemIds([]);
+      setMoveItemsError("");
+    } catch (error) {
+      setMoveItemsError(error instanceof Error ? error.message : "Não foi possível adicionar os itens.");
+      onFeedback(error instanceof Error ? error.message : "Não foi possível adicionar os itens.", "error");
+    } finally {
+      setIsMovingItems(false);
     }
   };
 
@@ -173,29 +249,44 @@ function MenuManagerComponent(
       <div className="menu-manager__categories">
         {groupedItems.map(({ category, items }) => (
           <section className="menu-manager__category" key={category.id}>
-            <button
-              className="menu-manager__category-header"
-              type="button"
-              aria-expanded={!collapsedCategories[category.id]}
-              onClick={() =>
-                setCollapsedCategories((current) => ({
-                  ...current,
-                  [category.id]: !current[category.id],
-                }))
-              }
-            >
+            <div className="menu-manager__category-header">
               <span className="menu-manager__category-copy">
                 <strong className="menu-manager__category-title">{category.name}</strong>
                 <span className="menu-manager__category-count">{items.length} itens</span>
               </span>
-              <ChevronDown
-                className={`menu-manager__category-icon${
-                  !collapsedCategories[category.id] ? " menu-manager__category-icon--open" : ""
-                }`}
-                size={20}
-                aria-hidden
-              />
-            </button>
+              <span className="menu-manager__category-actions">
+                <button
+                  className="menu-manager__category-button"
+                  type="button"
+                  onClick={() => openAddItemsDialog(category)}
+                  aria-label={`Adicionar itens em ${category.name}`}
+                  title={`Adicionar itens em ${category.name}`}
+                >
+                  <Plus size={18} aria-hidden />
+                </button>
+                <button
+                  className="menu-manager__category-button"
+                  type="button"
+                  aria-expanded={!collapsedCategories[category.id]}
+                  onClick={() =>
+                    setCollapsedCategories((current) => ({
+                      ...current,
+                      [category.id]: !current[category.id],
+                    }))
+                  }
+                  aria-label={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
+                  title={collapsedCategories[category.id] ? `Expandir ${category.name}` : `Recolher ${category.name}`}
+                >
+                  <ChevronDown
+                    className={`menu-manager__category-icon${
+                      !collapsedCategories[category.id] ? " menu-manager__category-icon--open" : ""
+                    }`}
+                    size={20}
+                    aria-hidden
+                  />
+                </button>
+              </span>
+            </div>
             {!collapsedCategories[category.id] ? (
               <div className="menu-manager__items">
                 {items.map((item) => {
@@ -275,6 +366,112 @@ function MenuManagerComponent(
           onSubmit={saveItem}
           onCreateCategory={createCategoryFromEditor}
         />
+      ) : null}
+
+      {categoryToReceiveItems ? (
+        <div className="menu-manager__dialog-overlay" role="presentation" onMouseDown={closeAddItemsDialog}>
+          <section
+            className="menu-manager__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="menu-manager-add-items-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="menu-manager__dialog-header">
+              <div className="menu-manager__dialog-heading">
+                <span className="menu-manager__dialog-eyebrow">Adicionar à categoria</span>
+                <h2 className="menu-manager__dialog-title" id="menu-manager-add-items-title">
+                  {categoryToReceiveItems.name}
+                </h2>
+              </div>
+              <button
+                className="menu-manager__dialog-close"
+                type="button"
+                onClick={closeAddItemsDialog}
+                disabled={isMovingItems}
+                aria-label="Fechar"
+              >
+                <X size={20} aria-hidden />
+              </button>
+            </header>
+
+            <div className="menu-manager__dialog-content">
+              {selectableItemsCount ? (
+                groupedItems.map(({ category, items }) => (
+                  <section className="menu-manager__picker-group" key={category.id}>
+                    <div className="menu-manager__picker-heading">
+                      <strong className="menu-manager__picker-title">{category.name}</strong>
+                      <span className="menu-manager__picker-count">
+                        {category.id === categoryToReceiveItems.id ? "Já na categoria" : `${items.length} itens`}
+                      </span>
+                    </div>
+
+                    {items.length ? (
+                      <div className="menu-manager__picker-items">
+                        {items.map((item) => {
+                          const isAlreadyInTargetCategory = item.categoryId === categoryToReceiveItems.id;
+                          const isSelected = selectedItemIds.includes(item.id);
+
+                          return (
+                            <label
+                              className={`menu-manager__picker-item${
+                                isSelected ? " menu-manager__picker-item--selected" : ""
+                              }${
+                                isAlreadyInTargetCategory ? " menu-manager__picker-item--disabled" : ""
+                              }`}
+                              key={item.id}
+                            >
+                              <input
+                                className="menu-manager__picker-checkbox"
+                                type="checkbox"
+                                checked={isSelected}
+                                disabled={isAlreadyInTargetCategory || isMovingItems}
+                                onChange={() => toggleSelectedItem(item.id)}
+                              />
+                              <span className="menu-manager__picker-copy">
+                                <strong className="menu-manager__picker-name">{item.name}</strong>
+                                <small className="menu-manager__picker-detail">
+                                  {isAlreadyInTargetCategory ? "Já está nesta categoria" : formatCurrency(item.price)}
+                                </small>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="menu-manager__picker-empty">Nenhum item nesta categoria.</p>
+                    )}
+                  </section>
+                ))
+              ) : (
+                <p className="menu-manager__picker-empty">
+                  Não há itens em outras categorias para adicionar aqui.
+                </p>
+              )}
+            </div>
+
+            <footer className="menu-manager__dialog-footer">
+              {moveItemsError ? <p className="menu-manager__dialog-error">{moveItemsError}</p> : null}
+              <button
+                className="menu-manager__button"
+                type="button"
+                onClick={closeAddItemsDialog}
+                disabled={isMovingItems}
+              >
+                Cancelar
+              </button>
+              <button
+                className="menu-manager__primary"
+                type="button"
+                onClick={moveSelectedItemsToCategory}
+                disabled={isMovingItems || !selectedItemIds.length}
+              >
+                {isMovingItems ? <Loader2 className="menu-manager__spinner" size={17} aria-hidden /> : <Plus size={17} aria-hidden />}
+                {isMovingItems ? "Adicionando" : `Adicionar ${selectedItemIds.length || ""}`.trim()}
+              </button>
+            </footer>
+          </section>
+        </div>
       ) : null}
 
       {itemToDelete ? (

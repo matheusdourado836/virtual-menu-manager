@@ -59,14 +59,14 @@
   }
 
   &__eyebrow {
-    color: var(--color-secondary);
+    color: var(--color-secondary-readable);
     font-size: var(--text-sm);
     font-weight: 900;
     text-transform: uppercase;
   }
 
   &__title {
-    color: var(--color-primary);
+    color: var(--color-primary-readable);
     font-size: var(--text-3xl);
     line-height: var(--line-tight);
   }
@@ -176,7 +176,7 @@
     justify-content: space-between;
     padding-top: var(--space-4);
     border-top: var(--border-thin) solid var(--color-border);
-    color: var(--color-primary);
+    color: var(--color-primary-readable);
     font-size: var(--text-xl);
     font-weight: 900;
   }

@@ -2,14 +2,24 @@
 
 import { Clock3, Eye, ImagePlus, Loader2, Palette, Save, Store as StoreIcon, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { updateStoreSettings, uploadStoreAsset } from "@/lib/services/store-service";
-import type { Store, StoreTheme } from "@/types/menu";
+import { formatCurrency } from "@/lib/utils/money";
+import {
+  deriveStoreThemeColors,
+  getReadableBrandColor,
+  getReadableTextColor,
+  mixHex,
+  rgbToHex,
+} from "@/lib/utils/theme-colors";
+import type { Category, MenuItem, Store, StoreTheme } from "@/types/menu";
 import "./store-settings.scss";
 
 interface StoreSettingsProps {
   store: Store;
   theme: StoreTheme;
+  categories: Category[];
+  menuItems: MenuItem[];
   onSaved: () => void | Promise<void>;
   onFeedback: (message: string, variant?: "success" | "error" | "info") => void;
 }
@@ -26,12 +36,6 @@ interface StoreSettingsForm {
   bannerUrl: string;
   primaryColor: string;
   secondaryColor: string;
-  accentColor: string;
-  backgroundColor: string;
-  surfaceColor: string;
-  textColor: string;
-  mutedTextColor: string;
-  borderColor: string;
   fontFamily: string;
   borderRadius: string;
   visualStyle: string;
@@ -46,11 +50,15 @@ interface OpeningDay {
   closesAt: string;
 }
 
-interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
+interface PreviewMenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl?: string;
 }
+
+type PreviewThemeStyle = CSSProperties & Record<`--${string}`, string>;
 
 const maxImageSizeInBytes = 5 * 1024 * 1024;
 
@@ -67,8 +75,6 @@ const weekDays = [
 const colorFields = [
   ["primaryColor", "Primária"],
   ["secondaryColor", "Secundária"],
-  ["accentColor", "Destaque"],
-  ["backgroundColor", "Fundo"],
 ] as const;
 
 const createDefaultOpeningDays = (): OpeningDay[] =>
@@ -125,41 +131,7 @@ const serializeOpeningHours = (openingDays: OpeningDay[]) => {
   return openDays.map((day) => `${day.shortLabel} ${day.opensAt}-${day.closesAt}`).join(", ");
 };
 
-const getColorChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-
-const rgbToHex = ({ r, g, b }: RgbColor) =>
-  `#${[r, g, b].map((channel) => getColorChannel(channel).toString(16).padStart(2, "0")).join("")}`;
-
-const hexToRgb = (hex: string): RgbColor | null => {
-  const normalized = hex.trim().replace("#", "");
-
-  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
-    return null;
-  }
-
-  return {
-    r: Number.parseInt(normalized.slice(0, 2), 16),
-    g: Number.parseInt(normalized.slice(2, 4), 16),
-    b: Number.parseInt(normalized.slice(4, 6), 16),
-  };
-};
-
-const mixHex = (baseHex: string, targetHex: string, targetWeight: number) => {
-  const base = hexToRgb(baseHex);
-  const target = hexToRgb(targetHex);
-
-  if (!base || !target) {
-    return baseHex;
-  }
-
-  return rgbToHex({
-    r: base.r * (1 - targetWeight) + target.r * targetWeight,
-    g: base.g * (1 - targetWeight) + target.g * targetWeight,
-    b: base.b * (1 - targetWeight) + target.b * targetWeight,
-  });
-};
-
-const getColorScore = ({ r, g, b }: RgbColor) => {
+const getColorScore = ({ r, g, b }: { r: number; g: number; b: number }) => {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const saturation = max === 0 ? 0 : (max - min) / max;
@@ -190,7 +162,7 @@ const getPaletteFromLogo = (file: File): Promise<Partial<StoreSettingsForm>> =>
       context.drawImage(image, 0, 0, sampleSize, sampleSize);
 
       const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data;
-      const buckets = new Map<string, RgbColor & { count: number }>();
+      const buckets = new Map<string, { r: number; g: number; b: number; count: number }>();
 
       for (let index = 0; index < pixels.length; index += 4) {
         const alpha = pixels[index + 3];
@@ -225,7 +197,7 @@ const getPaletteFromLogo = (file: File): Promise<Partial<StoreSettingsForm>> =>
 
       const rankedColors = [...buckets.values()]
         .sort((first, second) => second.count * getColorScore(second) - first.count * getColorScore(first))
-        .slice(0, 3)
+        .slice(0, 2)
         .map(rgbToHex);
 
       const primaryColor = rankedColors[0];
@@ -235,18 +207,11 @@ const getPaletteFromLogo = (file: File): Promise<Partial<StoreSettingsForm>> =>
         return;
       }
 
-      const secondaryColor = rankedColors[1] || mixHex(primaryColor, "#171817", 0.32);
-      const accentColor = rankedColors[2] || mixHex(primaryColor, "#ffffff", 0.3);
+      const secondaryColor = rankedColors[1] || mixHex(primaryColor, getReadableTextColor(primaryColor), 0.42);
 
       resolve({
         primaryColor,
         secondaryColor,
-        accentColor,
-        backgroundColor: mixHex(primaryColor, "#ffffff", 0.94),
-        surfaceColor: "#ffffff",
-        textColor: "#171817",
-        mutedTextColor: "#686966",
-        borderColor: mixHex(primaryColor, "#ffffff", 0.8),
       });
     };
 
@@ -258,7 +223,31 @@ const getPaletteFromLogo = (file: File): Promise<Partial<StoreSettingsForm>> =>
     image.src = objectUrl;
   });
 
-export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettingsProps) {
+const fallbackPreviewItems: PreviewMenuItem[] = [
+  {
+    id: "preview-1",
+    name: "Cappuccino clássico",
+    description: "Café cremoso preparado na hora.",
+    price: 12,
+    imageUrl: "/placeholder-item.svg",
+  },
+  {
+    id: "preview-2",
+    name: "Pão de queijo",
+    description: "Tradicional, quentinho e crocante.",
+    price: 8,
+    imageUrl: "/placeholder-item.svg",
+  },
+  {
+    id: "preview-3",
+    name: "Sanduíche artesanal",
+    description: "Ingredientes frescos e molho da casa.",
+    price: 18,
+    imageUrl: "/placeholder-item.svg",
+  },
+];
+
+export function StoreSettings({ store, theme, categories, menuItems, onSaved, onFeedback }: StoreSettingsProps) {
   const [form, setForm] = useState<StoreSettingsForm>({
     name: store.name,
     description: store.description,
@@ -271,12 +260,6 @@ export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettin
     bannerUrl: theme.bannerUrl || "",
     primaryColor: theme.primaryColor,
     secondaryColor: theme.secondaryColor,
-    accentColor: theme.accentColor,
-    backgroundColor: theme.backgroundColor,
-    surfaceColor: theme.surfaceColor,
-    textColor: theme.textColor,
-    mutedTextColor: theme.mutedTextColor,
-    borderColor: theme.borderColor,
     fontFamily: theme.fontFamily,
     borderRadius: String(theme.borderRadius),
     visualStyle: theme.visualStyle,
@@ -293,6 +276,51 @@ export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettin
 
   const logoDisplayUrl = logoPreviewUrl || form.logoUrl || "/placeholder-logo.svg";
   const bannerDisplayUrl = bannerPreviewUrl || form.bannerUrl || "/placeholder-banner.svg";
+  const derivedThemeColors = useMemo(
+    () => deriveStoreThemeColors(form.primaryColor, form.secondaryColor),
+    [form.primaryColor, form.secondaryColor],
+  );
+  const previewCategories = useMemo(() => {
+    const activeCategories = categories.filter((category) => category.isActive).slice(0, 2);
+
+    return activeCategories.length ? activeCategories.map((category) => category.name) : ["Lanches", "Bebidas"];
+  }, [categories]);
+  const previewMenuItems = useMemo<PreviewMenuItem[]>(() => {
+    const activeCategoryIds = new Set(categories.filter((category) => category.isActive).map((category) => category.id));
+    const activeItems = menuItems
+      .filter((item) => item.isAvailable && (!activeCategoryIds.size || activeCategoryIds.has(item.categoryId)))
+      .slice(0, 3)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description || "Preparado na hora.",
+        price: item.price,
+        imageUrl: item.imageUrl || "/placeholder-item.svg",
+      }));
+
+    return activeItems.length ? activeItems : fallbackPreviewItems;
+  }, [categories, menuItems]);
+  const previewBorderRadius = Number(form.borderRadius);
+  const previewThemeStyle: PreviewThemeStyle = {
+    "--color-primary": form.primaryColor,
+    "--color-secondary": form.secondaryColor,
+    "--color-accent": derivedThemeColors.accentColor,
+    "--color-on-primary": getReadableTextColor(form.primaryColor),
+    "--color-on-secondary": getReadableTextColor(form.secondaryColor),
+    "--color-primary-readable": getReadableBrandColor(form.primaryColor, derivedThemeColors.surfaceColor),
+    "--color-secondary-readable": getReadableBrandColor(form.secondaryColor, derivedThemeColors.surfaceColor),
+    "--color-background": derivedThemeColors.backgroundColor,
+    "--color-surface": derivedThemeColors.surfaceColor,
+    "--color-surface-strong": derivedThemeColors.surfaceColor,
+    "--color-text": derivedThemeColors.textColor,
+    "--color-text-muted": derivedThemeColors.mutedTextColor,
+    "--color-border": derivedThemeColors.borderColor,
+    "--focus-ring": `0 0 0 3px color-mix(in srgb, ${form.secondaryColor} 26%, transparent)`,
+    "--radius-md": `${Number.isFinite(previewBorderRadius) ? previewBorderRadius : theme.borderRadius}px`,
+    "--radius-sm": `${Math.max(4, (Number.isFinite(previewBorderRadius) ? previewBorderRadius : theme.borderRadius) - 2)}px`,
+    "--radius-lg": `${(Number.isFinite(previewBorderRadius) ? previewBorderRadius : theme.borderRadius) + 6}px`,
+    "--font-sans": form.fontFamily,
+  };
 
   useEffect(() => {
     return () => {
@@ -418,12 +446,12 @@ export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettin
           bannerUrl: uploadedBannerUrl,
           primaryColor: form.primaryColor,
           secondaryColor: form.secondaryColor,
-          accentColor: form.accentColor,
-          backgroundColor: form.backgroundColor,
-          surfaceColor: form.surfaceColor,
-          textColor: form.textColor,
-          mutedTextColor: form.mutedTextColor,
-          borderColor: form.borderColor,
+          accentColor: derivedThemeColors.accentColor,
+          backgroundColor: derivedThemeColors.backgroundColor,
+          surfaceColor: derivedThemeColors.surfaceColor,
+          textColor: derivedThemeColors.textColor,
+          mutedTextColor: derivedThemeColors.mutedTextColor,
+          borderColor: derivedThemeColors.borderColor,
           fontFamily: form.fontFamily.trim(),
           borderRadius,
           visualStyle: form.visualStyle.trim(),
@@ -655,7 +683,7 @@ export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettin
             <h2 className="store-settings__section-title">Cores da marca</h2>
           </div>
           <p className="store-settings__palette-note">
-            Ao enviar uma logo, o sistema tenta sugerir uma paleta automaticamente. Você ainda pode ajustar as cores.
+            Escolha a cor principal e a cor de apoio. Fundos, bordas e textos são ajustados automaticamente para manter leitura.
           </p>
 
           <div className="store-settings__colors">
@@ -724,21 +752,85 @@ export function StoreSettings({ store, theme, onSaved, onFeedback }: StoreSettin
               </button>
             </header>
 
-            <div className="store-settings__preview">
-              <Image
-                className="store-settings__preview-image"
-                src={bannerDisplayUrl}
-                alt=""
-                width={960}
-                height={540}
-                unoptimized
-              />
-              <div className="store-settings__preview-card">
-                <Image className="store-settings__logo" src={logoDisplayUrl} alt="" width={56} height={56} unoptimized />
-                <span className="store-settings__preview-copy">
-                  <strong className="store-settings__preview-title">{form.name || "Nome da loja"}</strong>
-                  <small className="store-settings__preview-text">{form.visualStyle || "Identidade visual"}</small>
-                </span>
+            <div className="store-settings__phone" style={previewThemeStyle}>
+              <div className="store-settings__phone-screen">
+                <header className="store-settings__phone-header">
+                  <div className="store-settings__phone-banner">
+                    <Image
+                      className="store-settings__phone-banner-image"
+                      src={bannerDisplayUrl}
+                      alt=""
+                      width={360}
+                      height={160}
+                      unoptimized
+                    />
+                  </div>
+
+                  <div className="store-settings__phone-brand">
+                    <Image className="store-settings__phone-logo" src={logoDisplayUrl} alt="" width={56} height={56} unoptimized />
+                    <span className="store-settings__phone-brand-copy">
+                      <small className="store-settings__phone-eyebrow">Cardápio digital</small>
+                      <strong className="store-settings__phone-title">{form.name || "Nome da loja"}</strong>
+                      <span className="store-settings__phone-description">
+                        {form.description || "Descrição curta da loja aparece aqui."}
+                      </span>
+                    </span>
+                    <span className="store-settings__phone-status">
+                      <span className="store-settings__phone-status-dot" />
+                      Aberto
+                    </span>
+                  </div>
+                </header>
+
+                <nav className="store-settings__phone-tabs" aria-label="Categorias do preview">
+                  {previewCategories.map((categoryName, index) => (
+                    <span
+                      className={`store-settings__phone-tab${index === 0 ? " store-settings__phone-tab--active" : ""}`}
+                      key={categoryName}
+                    >
+                      {categoryName}
+                    </span>
+                  ))}
+                </nav>
+
+                <section className="store-settings__phone-items" aria-label="Itens do preview">
+                  <div className="store-settings__phone-section">
+                    <span className="store-settings__phone-eyebrow">Explore o cardápio</span>
+                    <strong className="store-settings__phone-section-title">{previewCategories[0]}</strong>
+                  </div>
+
+                  {previewMenuItems.map((item) => (
+                    <article className="store-settings__phone-item" key={item.id}>
+                      <Image
+                        className="store-settings__phone-item-image"
+                        src={item.imageUrl || "/placeholder-item.svg"}
+                        alt=""
+                        width={72}
+                        height={72}
+                        unoptimized
+                      />
+                      <span className="store-settings__phone-item-copy">
+                        <strong className="store-settings__phone-item-title">{item.name}</strong>
+                        <small className="store-settings__phone-item-description">{item.description}</small>
+                        <span className="store-settings__phone-item-footer">
+                          <strong className="store-settings__phone-price">{formatCurrency(item.price)}</strong>
+                          <span className="store-settings__phone-add">Adicionar</span>
+                        </span>
+                      </span>
+                    </article>
+                  ))}
+                </section>
+
+                <footer className="store-settings__phone-cart">
+                  <span className="store-settings__phone-cart-count">{previewMenuItems.length}</span>
+                  <span className="store-settings__phone-cart-copy">
+                    <strong>Ver carrinho</strong>
+                    <small className="store-settings__phone-cart-detail">
+                      {previewMenuItems.length} itens selecionados
+                    </small>
+                  </span>
+                  <strong>{formatCurrency(previewMenuItems.reduce((total, item) => total + item.price, 0))}</strong>
+                </footer>
               </div>
             </div>
           </section>
