@@ -34,6 +34,7 @@
     border: var(--border-thin) solid var(--color-border);
     border-radius: var(--radius-lg);
     overflow-x: auto;
+    scroll-padding-inline: var(--space-3);
     overscroll-behavior-x: contain;
     background: var(--color-surface);
 

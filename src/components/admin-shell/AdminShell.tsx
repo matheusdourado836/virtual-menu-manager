@@ -18,12 +18,13 @@ import {
   RefreshCw,
   Store,
   Utensils,
+  type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
-import { OrdersBoard } from "@/components/orders-board/OrdersBoard";
+import { OrdersBoard, type OrderGroup } from "@/components/orders-board/OrdersBoard";
 import { StoreSettings } from "@/components/store-settings/StoreSettings";
 import { TablesManager } from "@/components/tables-manager/TablesManager";
 import { ThemeScope } from "@/components/theme-scope/ThemeScope";
@@ -41,6 +42,15 @@ import type { Order, StoreBundle, StoreTheme } from "@/types/menu";
 import "./admin-shell.scss";
 
 type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "settings";
+type DashboardMetricTarget = OrderGroup | "finance";
+
+interface DashboardMetric {
+  label: string;
+  helper: string;
+  value: number | string;
+  icon: LucideIcon;
+  target: DashboardMetricTarget;
+}
 
 const adminTabs: Array<{
   id: AdminTab;
@@ -88,6 +98,7 @@ interface AdminShellProps {
 export function AdminShell({ slug }: AdminShellProps) {
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersBoardGroup, setOrdersBoardGroup] = useState<OrderGroup>("all");
   const [activeTab, setActiveTab] = useState<AdminTab>("orders");
   const [user, setUser] = useState<User | null>(null);
   const [claims, setClaims] = useState<Record<string, unknown>>({});
@@ -106,6 +117,7 @@ export function AdminShell({ slug }: AdminShellProps) {
   const knownOrderIds = useRef<Set<string>>(new Set());
   const hasHydratedOrders = useRef(false);
   const menuManagerRef = useRef<MenuManagerHandle>(null);
+  const ordersBoardAnchorRef = useRef<HTMLDivElement | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
     variant: "success" | "error" | "info";
@@ -276,46 +288,51 @@ export function AdminShell({ slug }: AdminShellProps) {
 
   const now = new Date(currentTimestamp);
 
-  const recentOrders = useMemo(() => {
-    const cutoff = currentTimestamp - 24 * 60 * 60 * 1000;
+  const todayOrders = useMemo(() => {
+    const startOfDay = new Date(currentTimestamp);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+    const startTimestamp = startOfDay.getTime();
+    const endTimestamp = endOfDay.getTime();
 
     return orders.filter((order) => {
       const createdAt = new Date(order.createdAt).getTime();
-      return Number.isFinite(createdAt) && createdAt >= cutoff;
+      return Number.isFinite(createdAt) && createdAt >= startTimestamp && createdAt < endTimestamp;
     });
   }, [currentTimestamp, orders]);
 
-  const dashboardMetrics = useMemo(() => {
-    const today = new Date().toDateString();
-    const isToday = (isoDate: string) => new Date(isoDate).toDateString() === today;
-    const finalizedToday = recentOrders.filter(
-      (order) => order.status === "delivered" && isToday(order.deliveredAt || order.updatedAt),
-    );
+  const dashboardMetrics = useMemo<DashboardMetric[]>(() => {
+    const finalizedToday = todayOrders.filter((order) => order.status === "delivered");
 
     return [
       {
         label: "Novos",
         helper: "Aguardando confirmação",
-        value: recentOrders.filter((order) => ["received", "accepted"].includes(order.status)).length,
+        value: todayOrders.filter((order) => ["received", "accepted"].includes(order.status)).length,
         icon: ReceiptText,
+        target: "new",
       },
       {
         label: "Em preparo",
         helper: `Tempo estimado ${bundle?.store.estimatedPrepMinutes || 0} min`,
-        value: recentOrders.filter((order) => order.status === "preparing").length,
+        value: todayOrders.filter((order) => order.status === "preparing").length,
         icon: Clock3,
+        target: "preparing",
       },
       {
         label: "Prontos",
         helper: "Aguardando entrega",
-        value: recentOrders.filter((order) => order.status === "ready").length,
+        value: todayOrders.filter((order) => order.status === "ready").length,
         icon: BellRing,
+        target: "ready",
       },
       {
         label: "Finalizados",
         helper: "Hoje até agora",
         value: finalizedToday.length,
         icon: CheckCheck,
+        target: "finalized",
       },
       {
         label: "Faturamento hoje",
@@ -324,9 +341,10 @@ export function AdminShell({ slug }: AdminShellProps) {
         }`,
         value: formatCurrency(finalizedToday.reduce((total, order) => total + order.total, 0)),
         icon: CircleDollarSign,
+        target: "finance",
       },
     ];
-  }, [bundle?.store.estimatedPrepMinutes, recentOrders]);
+  }, [bundle?.store.estimatedPrepMinutes, todayOrders]);
 
   const greeting =
     now.getHours() < 12 ? "Bom dia" : now.getHours() < 18 ? "Boa tarde" : "Boa noite";
@@ -338,6 +356,28 @@ export function AdminShell({ slug }: AdminShellProps) {
   }).format(now);
   const showFeedback = (message: string, variant: "success" | "error" | "info" = "success") => {
     setFeedback({ message, variant });
+  };
+  const scrollToOrdersBoard = () => {
+    window.requestAnimationFrame(() => {
+      ordersBoardAnchorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+  const selectOrdersMetric = (group: OrderGroup) => {
+    setActiveTab("orders");
+    setOrdersBoardGroup(group);
+    scrollToOrdersBoard();
+  };
+  const openFinanceFromMetric = () => {
+    setActiveTab("finance");
+    window.requestAnimationFrame(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
   };
 
   if (!isAuthReady) {
@@ -520,11 +560,20 @@ export function AdminShell({ slug }: AdminShellProps) {
                 const Icon = metric.icon;
 
                 return (
-                  <article
+                  <button
                     className={`admin-shell__metric${
                       metric.label === "Faturamento hoje" ? " admin-shell__metric--revenue" : ""
                     }`}
                     key={metric.label}
+                    type="button"
+                    onClick={() => {
+                      if (metric.target === "finance") {
+                        openFinanceFromMetric();
+                        return;
+                      }
+
+                      selectOrdersMetric(metric.target);
+                    }}
                   >
                     <span className="admin-shell__metric-icon">
                       <Icon size={20} aria-hidden />
@@ -532,7 +581,7 @@ export function AdminShell({ slug }: AdminShellProps) {
                     <strong className="admin-shell__metric-value">{metric.value}</strong>
                     <span className="admin-shell__metric-label">{metric.label}</span>
                     <small className="admin-shell__metric-helper">{metric.helper}</small>
-                  </article>
+                  </button>
                 );
               })}
             </section>
@@ -540,11 +589,15 @@ export function AdminShell({ slug }: AdminShellProps) {
 
           <div className="admin-shell__content">
             {activeTab === "orders" ? (
-              <OrdersBoard
-                orders={recentOrders}
-                storeId={bundle.store.id}
-                onFeedback={showFeedback}
-              />
+              <div className="admin-shell__orders-anchor" ref={ordersBoardAnchorRef}>
+                <OrdersBoard
+                  orders={todayOrders}
+                  storeId={bundle.store.id}
+                  activeGroup={ordersBoardGroup}
+                  onActiveGroupChange={setOrdersBoardGroup}
+                  onFeedback={showFeedback}
+                />
+              </div>
             ) : null}
             {activeTab === "history" ? (
               <OrdersBoard

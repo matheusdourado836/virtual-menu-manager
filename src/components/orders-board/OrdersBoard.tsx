@@ -26,7 +26,7 @@ import { getPaymentMethodLabel } from "@/lib/utils/payment";
 import type { Order, OrderStatus } from "@/types/menu";
 import "./orders-board.scss";
 
-type OrderGroup =
+export type OrderGroup =
   | "all"
   | "new"
   | "preparing"
@@ -61,12 +61,20 @@ const orderGroups: Array<{
 interface OrdersBoardProps {
   storeId: string;
   orders: Order[];
+  activeGroup?: OrderGroup;
+  onActiveGroupChange?: (group: OrderGroup) => void;
   onFeedback: (message: string, variant?: "success" | "error" | "info") => void;
 }
 
-export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
+export function OrdersBoard({
+  storeId,
+  orders,
+  activeGroup,
+  onActiveGroupChange,
+  onFeedback,
+}: OrdersBoardProps) {
   const [search, setSearch] = useState("");
-  const [activeGroup, setActiveGroup] = useState<OrderGroup>("all");
+  const [internalActiveGroup, setInternalActiveGroup] = useState<OrderGroup>("all");
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [pendingAction, setPendingAction] = useState<{
     orderId: string;
@@ -77,16 +85,26 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [openActionsOrderId, setOpenActionsOrderId] = useState("");
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const filterButtonRefs = useRef<Partial<Record<OrderGroup, HTMLButtonElement | null>>>({});
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
   );
+  const selectedGroup = activeGroup ?? internalActiveGroup;
+
+  useEffect(() => {
+    filterButtonRefs.current[selectedGroup]?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [selectedGroup]);
 
   const filteredOrders = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     const selectedStatuses =
-      orderGroups.find((group) => group.id === activeGroup)?.statuses || [];
+      orderGroups.find((group) => group.id === selectedGroup)?.statuses || [];
     const groupOrders = orders.filter((order) =>
       selectedStatuses.includes(order.status),
     );
@@ -101,7 +119,7 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
         order.customerName.toLowerCase().includes(normalized) ||
         order.tableLabel?.toLowerCase().includes(normalized),
     );
-  }, [activeGroup, orders, search]);
+  }, [orders, search, selectedGroup]);
 
   useEffect(() => {
     if (!openActionsOrderId) {
@@ -196,6 +214,14 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
     }
   };
 
+  const selectGroup = (group: OrderGroup) => {
+    if (activeGroup === undefined) {
+      setInternalActiveGroup(group);
+    }
+
+    onActiveGroupChange?.(group);
+  };
+
   const renderActionButton = (
     order: Order,
     action: string,
@@ -288,12 +314,15 @@ export function OrdersBoard({ storeId, orders, onFeedback }: OrdersBoardProps) {
 
             return (
               <button
-                className={`orders-board__filter${activeGroup === group.id ? " orders-board__filter--active" : ""}`}
+                className={`orders-board__filter${selectedGroup === group.id ? " orders-board__filter--active" : ""}`}
                 type="button"
                 role="tab"
-                aria-selected={activeGroup === group.id}
+                aria-selected={selectedGroup === group.id}
                 key={group.id}
-                onClick={() => setActiveGroup(group.id)}
+                ref={(node) => {
+                  filterButtonRefs.current[group.id] = node;
+                }}
+                onClick={() => selectGroup(group.id)}
               >
                 {group.label}
                 <span className="orders-board__filter-count">{count}</span>

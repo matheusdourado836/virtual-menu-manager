@@ -1,7 +1,7 @@
 "use client";
 
 import QRCode from "qrcode";
-import { Copy, Plus, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
+import { Check, Copy, Plus, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { createTable } from "@/lib/services/store-service";
@@ -23,6 +23,8 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
   const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [copiedTableId, setCopiedTableId] = useState("");
+  const [changedTableId, setChangedTableId] = useState("");
 
   const visibleTables = useMemo(
     () => [
@@ -42,6 +44,24 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
       });
     });
   }, [baseUrl, storeSlug, visibleTables]);
+
+  useEffect(() => {
+    if (!copiedTableId) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setCopiedTableId(""), 1600);
+    return () => window.clearTimeout(timeoutId);
+  }, [copiedTableId]);
+
+  useEffect(() => {
+    if (!changedTableId) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setChangedTableId(""), 900);
+    return () => window.clearTimeout(timeoutId);
+  }, [changedTableId]);
 
   const addTable = async () => {
     if (!newLabel.trim()) {
@@ -77,10 +97,18 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
       ...currentTables.filter((candidate) => candidate.id !== tableId),
       { ...table, isActive: !table.isActive },
     ]);
+    setChangedTableId(tableId);
+    onFeedback?.(`${table.label} ${table.isActive ? "desativada" : "ativada"}.`);
   };
 
-  const copyLink = (tableId: string) => {
-    navigator.clipboard.writeText(`${baseUrl}/loja/${storeSlug}/mesa/${tableId}`);
+  const copyLink = async (tableId: string) => {
+    try {
+      await navigator.clipboard.writeText(`${baseUrl}/loja/${storeSlug}/mesa/${tableId}`);
+      setCopiedTableId(tableId);
+      onFeedback?.("Link da mesa copiado pra área de transferência.");
+    } catch {
+      onFeedback?.("Não foi possível copiar o link.", "error");
+    }
   };
 
   return (
@@ -106,6 +134,8 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
       <div className="tables-manager__grid">
         {visibleTables.map((table) => {
           const link = `${baseUrl}/loja/${storeSlug}/mesa/${table.id}`;
+          const isCopied = copiedTableId === table.id;
+          const didSwitchChange = changedTableId === table.id;
 
           return (
             <article className="tables-manager__table" key={table.id}>
@@ -115,9 +145,13 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
                   <span className="tables-manager__code">{table.code}</span>
                 </div>
                 <button
-                  className="tables-manager__icon-button"
+                  className={`tables-manager__icon-button tables-manager__icon-button--switch${
+                    table.isActive ? " tables-manager__icon-button--active" : ""
+                  }${didSwitchChange ? " tables-manager__icon-button--changed" : ""}`}
                   type="button"
                   onClick={() => toggleTable(table.id)}
+                  role="switch"
+                  aria-checked={table.isActive}
                   aria-label={table.isActive ? "Desativar mesa" : "Ativar mesa"}
                   title={table.isActive ? "Desativar mesa" : "Ativar mesa"}
                 >
@@ -143,13 +177,13 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
               <div className="tables-manager__link">
                 <span className="tables-manager__link-text">{link}</span>
                 <button
-                  className="tables-manager__copy"
+                  className={`tables-manager__copy${isCopied ? " tables-manager__copy--copied" : ""}`}
                   type="button"
-                  onClick={() => copyLink(table.id)}
-                  aria-label="Copiar link"
-                  title="Copiar link"
+                  onClick={() => void copyLink(table.id)}
+                  aria-label={isCopied ? "Link copiado" : "Copiar link"}
+                  title={isCopied ? "Link copiado" : "Copiar link"}
                 >
-                  <Copy size={16} aria-hidden />
+                  {isCopied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
                 </button>
               </div>
 

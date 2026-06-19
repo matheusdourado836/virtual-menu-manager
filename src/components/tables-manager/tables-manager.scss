@@ -124,6 +124,48 @@
     border-radius: var(--radius-sm);
     color: var(--color-secondary);
     background: var(--color-surface);
+    transition:
+      color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard),
+      background var(--duration-fast) var(--ease-standard),
+      box-shadow var(--duration-fast) var(--ease-standard),
+      transform var(--duration-fast) var(--ease-standard);
+
+    &:hover {
+      border-color: var(--admin-color-border-strong);
+      background: var(--color-surface-muted);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+
+  &__icon-button {
+    &--active {
+      border-color: var(--color-success);
+      color: var(--color-success);
+      background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+    }
+
+    &--changed {
+      box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--color-success) 18%, transparent);
+      transform: scale(var(--scale-pulse));
+    }
+  }
+
+  &__copy {
+    &--copied {
+      border-color: var(--color-success);
+      color: var(--color-success);
+      background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+      box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--color-success) 14%, transparent);
+    }
   }
 
   &__qr {
@@ -163,6 +205,13 @@
 
     &:hover {
       border-color: var(--admin-color-border-strong);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &__icon-button,
+    &__copy {
+      transition: none;
     }
   }
 }
