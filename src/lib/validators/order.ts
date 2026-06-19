@@ -20,7 +20,7 @@ export const createOrderSchema = z.object({
   storeId: z.string().min(1),
   tableId: z.string().optional(),
   tableLabel: z.string().optional(),
-  customerName: z.string().min(2),
+  customerName: z.string().min(2).optional(),
   customerPhone: z.string().optional(),
   paymentMethod: paymentMethodSchema,
   observation: z.string().max(500).optional(),

@@ -144,6 +144,12 @@
     &:active {
       transform: scale(0.94);
     }
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.62;
+      transform: none;
+    }
   }
 
   &__icon-button {

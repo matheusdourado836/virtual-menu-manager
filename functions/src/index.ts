@@ -70,6 +70,11 @@ interface StoreAvailability {
   pausedMessage?: string;
 }
 
+interface TableAvailability {
+  label?: string;
+  isActive?: boolean;
+}
+
 const timeToMinutes = (value: string) => {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
@@ -133,7 +138,7 @@ const createOrderSchema = z.object({
   storeId: z.string().min(1),
   tableId: nullableOptionalString,
   tableLabel: nullableOptionalString,
-  customerName: z.string().min(2),
+  customerName: nullableOptionalText(120),
   customerPhone: nullableOptionalString,
   paymentMethod: z.enum(["pay_on_pickup", "pix_on_pickup", "card_on_pickup", "cash_on_pickup"]),
   observation: nullableOptionalText(500),
@@ -185,6 +190,12 @@ const getAdminStoreBundleSchema = z.object({
 const createTableSchema = z.object({
   storeId: z.string().min(1),
   label: z.string().trim().min(2).max(60),
+});
+
+const updateTableSchema = z.object({
+  storeId: z.string().min(1),
+  tableId: z.string().min(1),
+  isActive: z.boolean(),
 });
 
 const createCategorySchema = z.object({
@@ -427,6 +438,27 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
       }
     }
 
+    let tableId: string | undefined;
+    let tableLabel: string | undefined;
+
+    if (payload.tableId) {
+      const tableSnapshot = await transaction.get(storeRef.collection("tables").doc(payload.tableId));
+      const table = tableSnapshot.data() as TableAvailability | undefined;
+
+      if (!tableSnapshot.exists || !table?.isActive) {
+        throw new HttpsError("failed-precondition", "Mesa não encontrada ou inativa.");
+      }
+
+      tableId = tableSnapshot.id;
+      tableLabel = table.label || "Mesa";
+    }
+
+    const customerName = tableLabel || payload.customerName?.trim();
+
+    if (!customerName || customerName.length < 2) {
+      throw new HttpsError("failed-precondition", "Informe seu nome para identificar o pedido.");
+    }
+
     const officialItems = [];
 
     for (const item of payload.items) {
@@ -483,10 +515,10 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
       id: orderRef.id,
       storeId: payload.storeId,
       code: String(nextCode).padStart(3, "0"),
-      tableId: payload.tableId,
-      tableLabel: payload.tableLabel,
-      customerName: payload.customerName,
-      customerPhone: payload.customerPhone,
+      tableId,
+      tableLabel,
+      customerName,
+      customerPhone: tableId ? undefined : payload.customerPhone,
       status: initialStatus,
       paymentMethod: payload.paymentMethod,
       paymentStatus: "pending",
@@ -574,6 +606,30 @@ export const createTable = onCall(async (request) => {
 
   await tableRef.set(removeUndefined(table));
   return table;
+});
+
+export const updateTable = onCall(async (request) => {
+  const payload = updateTableSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const now = new Date().toISOString();
+  const tableRef = db.collection(`stores/${payload.storeId}/tables`).doc(payload.tableId);
+  const tableSnapshot = await tableRef.get();
+
+  if (!tableSnapshot.exists) {
+    throw new HttpsError("not-found", "Mesa não encontrada.");
+  }
+
+  await tableRef.set(
+    {
+      isActive: payload.isActive,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  const updatedSnapshot = await tableRef.get();
+  return mapDocument(updatedSnapshot);
 });
 
 export const createCategory = onCall(async (request) => {

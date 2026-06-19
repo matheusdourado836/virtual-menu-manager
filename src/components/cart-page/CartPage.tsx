@@ -46,6 +46,17 @@ export function CartPage({ slug, tableId }: CartPageProps) {
           return;
         }
 
+        if (loadedBundle && tableId) {
+          const loadedTable = loadedBundle.tables.find((candidate) => candidate.id === tableId && candidate.isActive);
+
+          if (!loadedTable) {
+            setBundle(null);
+            setCartLines([]);
+            setLoadError("Mesa não encontrada ou inativa.");
+            return;
+          }
+        }
+
         setBundle(loadedBundle);
 
         if (loadedBundle) {
@@ -88,6 +99,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
   const subtotal = useMemo(() => getCartSubtotal(cartLines), [cartLines]);
   const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
   const menuLink = table?.id ? `/loja/${slug}/mesa/${table.id}` : `/loja/${slug}`;
+  const isTableOrder = Boolean(table);
 
   const updateCart = (lines: CartLine[]) => {
     setCartLines(lines);
@@ -122,12 +134,12 @@ export function CartPage({ slug, tableId }: CartPageProps) {
       return;
     }
 
-    if (!customerName.trim()) {
+    if (!isTableOrder && !customerName.trim()) {
       setError("Informe seu nome para identificar o pedido.");
       return;
     }
 
-    if (customerPhone.trim() && !isValidBrazilianPhone(customerPhone)) {
+    if (!isTableOrder && customerPhone.trim() && !isValidBrazilianPhone(customerPhone)) {
       setError("Informe um telefone válido com DDD.");
       return;
     }
@@ -144,8 +156,8 @@ export function CartPage({ slug, tableId }: CartPageProps) {
         storeId: bundle.store.id,
         tableId: table?.id,
         tableLabel: table?.label,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim() || undefined,
+        customerName: isTableOrder ? undefined : customerName.trim(),
+        customerPhone: isTableOrder ? undefined : customerPhone.trim() || undefined,
         paymentMethod,
         observation: observation.trim() || undefined,
         items: cartLines.map((line) => ({
@@ -287,35 +299,46 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                   </span>
                   <div>
                     <h2 className="cart-page__panel-title">Finalizar pedido</h2>
-                    <p className="cart-page__panel-subtitle">Confirme seus dados para enviar</p>
+                    <p className="cart-page__panel-subtitle">
+                      {isTableOrder ? "Pedido vinculado à mesa" : "Confirme seus dados para enviar"}
+                    </p>
                   </div>
                 </div>
 
                 <div className="cart-page__form">
-                  <label className="cart-page__field">
-                    <span className="cart-page__label">Nome *</span>
-                    <input
-                      className="cart-page__control"
-                      value={customerName}
-                      placeholder="Como podemos chamar você?"
-                      onChange={(event) => setCustomerName(event.target.value)}
-                      required
-                    />
-                  </label>
+                  {isTableOrder ? (
+                    <div className="cart-page__table-context">
+                      <span className="cart-page__table-eyebrow">Mesa do pedido</span>
+                      <strong className="cart-page__table-name">{table?.label}</strong>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="cart-page__field">
+                        <span className="cart-page__label">Nome *</span>
+                        <input
+                          className="cart-page__control"
+                          value={customerName}
+                          placeholder="Como podemos chamar você?"
+                          onChange={(event) => setCustomerName(event.target.value)}
+                          required
+                        />
+                      </label>
 
-                  <label className="cart-page__field">
-                    <span className="cart-page__label">Telefone opcional</span>
-                    <input
-                      className="cart-page__control"
-                      value={customerPhone}
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      maxLength={15}
-                      placeholder="(00) 00000-0000"
-                      onChange={(event) => setCustomerPhone(formatPhoneInput(event.target.value))}
-                    />
-                  </label>
+                      <label className="cart-page__field">
+                        <span className="cart-page__label">Telefone opcional</span>
+                        <input
+                          className="cart-page__control"
+                          value={customerPhone}
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          maxLength={15}
+                          placeholder="(00) 00000-0000"
+                          onChange={(event) => setCustomerPhone(formatPhoneInput(event.target.value))}
+                        />
+                      </label>
+                    </>
+                  )}
 
                   <label className="cart-page__field">
                     <span className="cart-page__label">Pagamento *</span>

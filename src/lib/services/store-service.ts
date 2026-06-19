@@ -154,6 +154,13 @@ export const createTable = async (storeId: string, label: string) => {
   return response.data as Table;
 };
 
+export const updateTable = async (storeId: string, tableId: string, isActive: boolean) => {
+  const callable = httpsCallable(firebaseFunctions, "updateTable");
+  const response = await callable({ storeId, tableId, isActive });
+
+  return response.data as Table;
+};
+
 export const createCategory = async (storeId: string, name: string) => {
   const callable = httpsCallable(firebaseFunctions, "createCategory");
   const response = await callable({ storeId, name });

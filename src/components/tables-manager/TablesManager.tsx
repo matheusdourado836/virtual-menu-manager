@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { Check, Copy, Plus, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { createTable } from "@/lib/services/store-service";
+import { createTable, updateTable } from "@/lib/services/store-service";
 import { getPublicAppUrl } from "@/lib/utils/public-url";
 import type { Table } from "@/types/menu";
 import "./tables-manager.scss";
@@ -25,6 +25,7 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
   const [isCreating, setIsCreating] = useState(false);
   const [copiedTableId, setCopiedTableId] = useState("");
   const [changedTableId, setChangedTableId] = useState("");
+  const [updatingTableId, setUpdatingTableId] = useState("");
 
   const visibleTables = useMemo(
     () => [
@@ -86,19 +87,40 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
     }
   };
 
-  const toggleTable = (tableId: string) => {
+  const toggleTable = async (tableId: string) => {
     const table = visibleTables.find((candidate) => candidate.id === tableId);
 
-    if (!table) {
+    if (!table || updatingTableId) {
       return;
     }
 
+    const nextIsActive = !table.isActive;
+    setUpdatingTableId(tableId);
     setLocalTables((currentTables) => [
       ...currentTables.filter((candidate) => candidate.id !== tableId),
-      { ...table, isActive: !table.isActive },
+      { ...table, isActive: nextIsActive },
     ]);
-    setChangedTableId(tableId);
-    onFeedback?.(`${table.label} ${table.isActive ? "desativada" : "ativada"}.`);
+
+    try {
+      const updatedTable = await updateTable(storeId, tableId, nextIsActive);
+      setLocalTables((currentTables) => [
+        ...currentTables.filter((candidate) => candidate.id !== tableId),
+        updatedTable,
+      ]);
+      setChangedTableId(tableId);
+      onFeedback?.(`${updatedTable.label} ${updatedTable.isActive ? "ativada" : "desativada"}.`);
+    } catch (updateError) {
+      setLocalTables((currentTables) => [
+        ...currentTables.filter((candidate) => candidate.id !== tableId),
+        table,
+      ]);
+      onFeedback?.(
+        updateError instanceof Error ? updateError.message : "Não foi possível atualizar a mesa.",
+        "error",
+      );
+    } finally {
+      setUpdatingTableId("");
+    }
   };
 
   const copyLink = async (tableId: string) => {
@@ -136,6 +158,7 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
           const link = `${baseUrl}/loja/${storeSlug}/mesa/${table.id}`;
           const isCopied = copiedTableId === table.id;
           const didSwitchChange = changedTableId === table.id;
+          const isUpdating = updatingTableId === table.id;
 
           return (
             <article className="tables-manager__table" key={table.id}>
@@ -149,11 +172,12 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
                     table.isActive ? " tables-manager__icon-button--active" : ""
                   }${didSwitchChange ? " tables-manager__icon-button--changed" : ""}`}
                   type="button"
-                  onClick={() => toggleTable(table.id)}
+                  onClick={() => void toggleTable(table.id)}
                   role="switch"
                   aria-checked={table.isActive}
                   aria-label={table.isActive ? "Desativar mesa" : "Ativar mesa"}
                   title={table.isActive ? "Desativar mesa" : "Ativar mesa"}
+                  disabled={isUpdating}
                 >
                   {table.isActive ? <ToggleRight size={24} aria-hidden /> : <ToggleLeft size={24} aria-hidden />}
                 </button>

@@ -65,7 +65,7 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
             <div className="order-details-dialog__summary-copy">
               <strong>{order.tableLabel || order.customerName || "Balcão"}</strong>
               <span className="order-details-dialog__summary-detail">
-                {order.tableLabel ? order.customerName || "Cliente não informado" : "Pedido balcão"}
+                {order.tableLabel ? "Pedido da mesa" : "Pedido balcão"}
               </span>
             </div>
             <StatusPill status={order.status} />
@@ -79,7 +79,9 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
             <dl className="order-details-dialog__info-grid">
               <div className="order-details-dialog__info">
                 <dt className="order-details-dialog__info-label">Cliente</dt>
-                <dd className="order-details-dialog__info-value">{order.customerName || "Não informado"}</dd>
+                <dd className="order-details-dialog__info-value">
+                  {order.tableLabel ? "Não informado" : order.customerName || "Não informado"}
+                </dd>
               </div>
               <div className="order-details-dialog__info">
                 <dt className="order-details-dialog__info-label">Telefone</dt>
@@ -87,7 +89,7 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
               </div>
               <div className="order-details-dialog__info">
                 <dt className="order-details-dialog__info-label">Origem</dt>
-                <dd className="order-details-dialog__info-value">{order.tableLabel ? `Mesa ${order.tableLabel}` : "Balcão"}</dd>
+                <dd className="order-details-dialog__info-value">{order.tableLabel || "Balcão"}</dd>
               </div>
               <div className="order-details-dialog__info">
                 <dt className="order-details-dialog__info-label">Criado em</dt>
