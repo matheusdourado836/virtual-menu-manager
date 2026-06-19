@@ -12,6 +12,7 @@ import { writeStoredOrderReference } from "@/features/order-tracking/order-track
 import { createOrder, getStoreBundleBySlug } from "@/lib/services/store-service";
 import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
+import { getStoreOpenState } from "@/lib/utils/opening-hours";
 import type { CartLine, PaymentMethod, StoreBundle } from "@/types/menu";
 import "./cart-page.scss";
 
@@ -19,6 +20,8 @@ interface CartPageProps {
   slug: string;
   tableId?: string;
 }
+
+const minuteInMilliseconds = 60 * 1000;
 
 export function CartPage({ slug, tableId }: CartPageProps) {
   const router = useRouter();
@@ -32,6 +35,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     let isMounted = true;
@@ -71,12 +75,18 @@ export function CartPage({ slug, tableId }: CartPageProps) {
     };
   }, [slug, tableId]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), minuteInMilliseconds);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const table = useMemo(
     () => bundle?.tables.find((candidate) => candidate.id === tableId && candidate.isActive),
     [bundle, tableId],
   );
 
   const subtotal = useMemo(() => getCartSubtotal(cartLines), [cartLines]);
+  const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
   const menuLink = table?.id ? `/loja/${slug}/mesa/${table.id}` : `/loja/${slug}`;
 
   const updateCart = (lines: CartLine[]) => {
@@ -106,6 +116,11 @@ export function CartPage({ slug, tableId }: CartPageProps) {
     }
 
     setError("");
+
+    if (!storeOpenState?.isOpen) {
+      setError(storeOpenState?.message || "A loja está fechada no momento.");
+      return;
+    }
 
     if (!customerName.trim()) {
       setError("Informe seu nome para identificar o pedido.");

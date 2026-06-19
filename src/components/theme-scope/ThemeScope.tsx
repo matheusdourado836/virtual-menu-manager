@@ -27,6 +27,7 @@ export function ThemeScope({ theme, children }: ThemeScopeProps) {
     "--color-text": theme.textColor,
     "--color-text-muted": theme.mutedTextColor,
     "--color-border": theme.borderColor,
+    "--color-border-strong": `color-mix(in srgb, ${theme.borderColor} 68%, ${theme.textColor})`,
     "--focus-ring": `0 0 0 3px color-mix(in srgb, ${theme.secondaryColor} 26%, transparent)`,
     "--radius-md": `${theme.borderRadius}px`,
     "--radius-sm": `${Math.max(4, theme.borderRadius - 2)}px`,

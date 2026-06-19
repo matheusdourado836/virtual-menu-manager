@@ -21,6 +21,7 @@ import {
   readStoredOrderReference,
 } from "@/features/order-tracking/order-tracking-storage";
 import { getStoreBundleBySlug } from "@/lib/services/store-service";
+import { getStoreOpenState } from "@/lib/utils/opening-hours";
 import { formatCurrency } from "@/lib/utils/money";
 import type { CartLine, CartSelectedOption, MenuItem, StoreBundle } from "@/types/menu";
 import "./public-menu.scss";
@@ -29,6 +30,8 @@ interface PublicMenuProps {
   slug: string;
   tableId?: string;
 }
+
+const minuteInMilliseconds = 60 * 1000;
 
 export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
@@ -39,6 +42,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [trackedOrderId, setTrackedOrderId] = useState("");
   const [notice, setNotice] = useState("");
+  const [now, setNow] = useState(() => new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedCart, setHasLoadedCart] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -89,6 +93,11 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     };
   }, [slug, tableId]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), minuteInMilliseconds);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const table = useMemo(
     () => bundle?.tables.find((candidate) => candidate.id === tableId && candidate.isActive),
     [bundle, tableId],
@@ -101,10 +110,6 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
 
     return bundle.menuItems.filter((item) => item.categoryId === selectedCategory && item.isAvailable);
   }, [bundle, selectedCategory]);
-
-  const openItem = (item: MenuItem) => {
-    setSelectedItem(item);
-  };
 
   useEffect(() => {
     if (!bundle || !hasLoadedCart) {
@@ -170,6 +175,17 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const cartQuantity = getCartQuantity(cartLines);
   const cartSubtotal = getCartSubtotal(cartLines);
   const activeCategory = bundle?.categories.find((category) => category.id === selectedCategory);
+  const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
+  const canReceiveOrders = storeOpenState?.isOpen ?? false;
+
+  const openItem = (item: MenuItem) => {
+    if (!canReceiveOrders) {
+      setNotice(storeOpenState?.message || "");
+      return;
+    }
+
+    setSelectedItem(item);
+  };
 
   if (isLoading) {
     return <LoadingState label="Carregando cardápio" />;
@@ -200,28 +216,23 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                 unoptimized
               />
               <div className="public-menu__brand-copy">
-                <span className="public-menu__eyebrow">Cardápio digital</span>
                 <h1 className="public-menu__title">{bundle.store.name}</h1>
               </div>
             </div>
 
             <span
               className={`public-menu__status${
-                bundle.store.isAcceptingOrders ? " public-menu__status--online" : " public-menu__status--paused"
+                canReceiveOrders ? " public-menu__status--online" : " public-menu__status--paused"
               }`}
             >
               <span className="public-menu__status-dot" />
-              {bundle.store.isAcceptingOrders ? "Aberto" : "Pausado"}
+              {canReceiveOrders ? "Aberto" : "Fechado"}
             </span>
           </div>
 
           <p className="public-menu__description">{bundle.store.description}</p>
 
           <div className="public-menu__meta">
-            <span className="public-menu__meta-item">
-              <Clock3 size={15} aria-hidden />
-              {bundle.store.estimatedPrepMinutes} min
-            </span>
             <span className="public-menu__meta-item">
               <MapPin size={15} aria-hidden />
               {table?.label || "Retirada no balcão"}
@@ -247,10 +258,10 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
           ))}
         </nav>
 
-        {!bundle.store.isAcceptingOrders ? (
+        {!canReceiveOrders ? (
           <div className="public-menu__notice" role="status">
             <AlertTriangle size={18} aria-hidden />
-            {bundle.store.pausedMessage}
+            {storeOpenState?.message}
           </div>
         ) : null}
 
@@ -346,7 +357,15 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
             onToggleOption={(groupId, choiceId, maxSelected) =>
               toggleOption(selectedItem, groupId, choiceId, maxSelected)
             }
-            onAdd={(quantity) => addItem(selectedItem, quantity)}
+            onAdd={(quantity) => {
+              if (!canReceiveOrders) {
+                setNotice(storeOpenState?.message || "");
+                setSelectedItem(null);
+                return;
+              }
+
+              addItem(selectedItem, quantity);
+            }}
           />
         ) : null}
 

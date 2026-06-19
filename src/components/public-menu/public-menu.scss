@@ -55,7 +55,7 @@
     width: var(--menu-logo-size);
     height: var(--menu-logo-size);
     flex: 0 0 auto;
-    border: var(--border-thin) solid var(--color-border);
+    border: var(--border-thin) solid var(--color-border-strong);
     border-radius: var(--radius-md);
     object-fit: cover;
     background: var(--color-surface);
@@ -98,7 +98,7 @@
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 16%, var(--color-border));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 20%, var(--color-border-strong));
     border-radius: var(--radius-pill);
     color: var(--color-text-muted);
     background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary));
@@ -149,7 +149,7 @@
     display: flex;
     gap: var(--space-1);
     padding: var(--space-1);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 18%, var(--color-border));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 18%, var(--color-border-strong));
     border-radius: var(--radius-lg);
     overflow-x: auto;
     background: color-mix(in srgb, var(--color-surface) 88%, var(--color-background));
@@ -165,7 +165,7 @@
     gap: var(--space-2);
     min-height: var(--space-10);
     padding: 0 var(--space-3);
-    border: 0;
+    border: var(--border-thin) solid transparent;
     border-radius: var(--radius-md);
     color: color-mix(in srgb, var(--color-text) 74%, var(--color-secondary-readable));
     background: transparent;
@@ -187,11 +187,13 @@
     }
 
     &:hover {
+      border-color: color-mix(in srgb, var(--color-secondary) 16%, var(--color-border-strong));
       color: var(--color-secondary-readable);
       background: color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface));
     }
 
     &--active {
+      border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-secondary));
       color: var(--color-on-secondary);
       background: linear-gradient(
         135deg,
@@ -208,7 +210,7 @@
     gap: var(--space-2);
     margin-top: var(--space-3);
     padding: var(--space-3);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 28%, var(--color-border));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 28%, var(--color-border-strong));
     border-radius: var(--radius-md);
     color: var(--color-secondary-readable);
     background: color-mix(in srgb, var(--color-secondary) 10%, var(--color-surface));
@@ -258,7 +260,7 @@
     gap: var(--space-3);
     align-items: stretch;
     padding: var(--space-3);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border-strong));
     border-radius: var(--radius-lg);
     background:
       linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-strong)), var(--color-surface-strong) 46%),
@@ -290,7 +292,7 @@
     border-radius: var(--radius-md);
     object-fit: cover;
     background: color-mix(in srgb, var(--color-primary) 38%, var(--color-surface));
-    box-shadow: 0 0 0 var(--border-thin) color-mix(in srgb, var(--color-secondary) 28%, var(--color-border));
+    box-shadow: 0 0 0 var(--border-thin) color-mix(in srgb, var(--color-secondary) 28%, var(--color-border-strong));
   }
 
   &__item-body {
@@ -341,7 +343,7 @@
     gap: var(--space-1);
     min-height: var(--space-8);
     padding: 0 var(--space-2);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 32%, var(--color-border));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 32%, var(--color-border-strong));
     border-radius: var(--radius-md);
     color: var(--color-secondary-readable);
     background: color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface));
@@ -375,6 +377,7 @@
     min-height: var(--toolbar-height);
     margin-inline: auto;
     padding: var(--space-2) var(--space-3);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-on-secondary) 18%, transparent);
     border-radius: var(--radius-lg);
     color: var(--color-on-secondary);
     background: linear-gradient(
@@ -441,7 +444,7 @@
     min-width: var(--menu-fab-size);
     height: var(--menu-fab-size);
     padding: 0 var(--space-4);
-    border: var(--border-thin) solid color-mix(in srgb, var(--color-primary) 32%, var(--color-surface-strong));
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-primary) 32%, var(--color-border-strong));
     border-radius: var(--radius-pill);
     color: var(--color-on-secondary);
     background: var(--color-secondary);

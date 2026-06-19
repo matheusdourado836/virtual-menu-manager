@@ -46,6 +46,87 @@ const removeUndefined = <T>(value: T): T => {
   return value;
 };
 
+const storeTimezone = "America/Sao_Paulo";
+const weekdayLabelByShortName: Record<string, string> = {
+  Sun: "Dom",
+  Mon: "Seg",
+  Tue: "Ter",
+  Wed: "Qua",
+  Thu: "Qui",
+  Fri: "Sex",
+  Sat: "Sáb",
+};
+
+interface OpeningEntry {
+  dayLabel: string;
+  opensAt: number;
+  closesAt: number;
+}
+
+interface StoreAvailability {
+  isActive?: boolean;
+  isAcceptingOrders?: boolean;
+  openingHours?: string;
+  pausedMessage?: string;
+}
+
+const timeToMinutes = (value: string) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const parseOpeningHours = (openingHours?: string): OpeningEntry[] => {
+  if (!openingHours || openingHours.trim() === "Fechado") {
+    return [];
+  }
+
+  return openingHours
+    .split(",")
+    .map((rawPart) => {
+      const match = rawPart.trim().match(/^(Seg|Ter|Qua|Qui|Sex|Sáb|Dom)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/u);
+
+      if (!match) {
+        return null;
+      }
+
+      const [, dayLabel, opensAt, closesAt] = match;
+
+      return {
+        dayLabel,
+        opensAt: timeToMinutes(opensAt),
+        closesAt: timeToMinutes(closesAt),
+      };
+    })
+    .filter((entry): entry is OpeningEntry => Boolean(entry));
+};
+
+const getZonedDayAndMinutes = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: storeTimezone,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const weekday = parts.find((part) => part.type === "weekday")?.value || "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+
+  return {
+    dayLabel: weekdayLabelByShortName[weekday] || "",
+    minutes: hour * 60 + minute,
+  };
+};
+
+const isWithinOpeningHours = (openingHours: string | undefined, date: Date) => {
+  const entries = parseOpeningHours(openingHours);
+  const current = getZonedDayAndMinutes(date);
+  const today = entries.find((entry) => entry.dayLabel === current.dayLabel);
+
+  return Boolean(today && current.minutes >= today.opensAt && current.minutes < today.closesAt);
+};
+
 const orderStatusSchema = z.enum(["received", "accepted", "preparing", "ready", "delivered", "cancelled"]);
 
 const createOrderSchema = z.object({
@@ -319,14 +400,31 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
   const storeRef = db.doc(`stores/${payload.storeId}`);
   const orderRef = storeRef.collection("orders").doc();
   const counterRef = storeRef.collection("counters").doc("orders");
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
 
   const order = await db.runTransaction(async (transaction) => {
     const storeSnapshot = await transaction.get(storeRef);
-    const store = storeSnapshot.data() as { isActive?: boolean; isAcceptingOrders?: boolean } | undefined;
+    const store = storeSnapshot.data() as StoreAvailability | undefined;
 
-    if (!store?.isActive || (!options.allowPausedStore && !store?.isAcceptingOrders)) {
+    if (!store?.isActive) {
       throw new HttpsError("failed-precondition", "Loja indisponível para pedidos online.");
+    }
+
+    if (!options.allowPausedStore) {
+      if (!store.isAcceptingOrders) {
+        throw new HttpsError(
+          "failed-precondition",
+          store.pausedMessage || "A loja está fechada no momento.",
+        );
+      }
+
+      if (!isWithinOpeningHours(store.openingHours, nowDate)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "A loja está fechada no momento. Tente novamente dentro do horário de funcionamento.",
+        );
+      }
     }
 
     const officialItems = [];

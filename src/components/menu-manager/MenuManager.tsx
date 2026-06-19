@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChevronDown, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
 import { AdditionalEditorDialog } from "@/components/additional-editor-dialog/AdditionalEditorDialog";
@@ -34,6 +35,7 @@ export interface MenuManagerHandle {
 }
 
 type MenuManagerSection = "items" | "additionals";
+const placeholderItemImage = "/placeholder-item.svg";
 
 function MenuManagerComponent(
   { storeId, categories, additionals, menuItems, onChanged, onFeedback }: MenuManagerProps,
@@ -57,6 +59,7 @@ function MenuManagerComponent(
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isMovingItems, setIsMovingItems] = useState(false);
   const [moveItemsError, setMoveItemsError] = useState("");
+  const [failedItemImages, setFailedItemImages] = useState<Record<string, string>>({});
 
   const activeCategories = useMemo(() => categories.filter((category) => category.isActive), [categories]);
   const groupedItems = useMemo(
@@ -395,12 +398,42 @@ function MenuManagerComponent(
                     {items.map((item) => {
                       const isSaving = savingItemId === item.id;
                       const isDeleting = deletingItemId === item.id;
+                      const itemImageUrl = item.imageUrl || "";
+                      const shouldShowImage = Boolean(itemImageUrl) && failedItemImages[item.id] !== itemImageUrl;
+                      const itemImageSrc = shouldShowImage ? itemImageUrl : placeholderItemImage;
 
                       return (
                         <article
                           className={`menu-manager__item${item.isAvailable ? "" : " menu-manager__item--disabled"}`}
                           key={item.id}
                         >
+                          <span className="menu-manager__item-thumb" aria-hidden={!shouldShowImage}>
+                            {shouldShowImage ? (
+                              <Image
+                                className="menu-manager__item-image"
+                                src={itemImageSrc}
+                                alt={`Imagem de ${item.name}`}
+                                width={72}
+                                height={72}
+                                unoptimized
+                                onError={() =>
+                                  setFailedItemImages((current) => ({
+                                    ...current,
+                                    [item.id]: itemImageUrl,
+                                  }))
+                                }
+                              />
+                            ) : (
+                              <Image
+                                className="menu-manager__item-placeholder"
+                                src={placeholderItemImage}
+                                alt=""
+                                width={72}
+                                height={72}
+                                unoptimized
+                              />
+                            )}
+                          </span>
                           <div className="menu-manager__item-copy">
                             <strong className="menu-manager__item-name">{item.name}</strong>
                             <span className="menu-manager__item-description">{item.description}</span>

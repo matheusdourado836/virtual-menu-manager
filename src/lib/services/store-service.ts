@@ -208,17 +208,129 @@ const getSafeImageExtension = (file: File) => {
   return rawExtension.replace(/[^a-z0-9]/g, "") || "jpg";
 };
 
+const menuItemImageMaxDimension = 768;
+const menuItemImageMaxUploadSize = 4.5 * 1024 * 1024;
+const menuItemImageQualitySteps = [0.82, 0.74, 0.66, 0.58] as const;
+
+interface OptimizedImageUpload {
+  blob: Blob;
+  extension: string;
+  contentType: string;
+}
+
 const isManagedStorageUrl = (url: string) =>
   url.startsWith("gs://") || url.startsWith("https://firebasestorage.googleapis.com/");
 
+const loadBrowserImage = async (file: File): Promise<ImageBitmap | HTMLImageElement> => {
+  if (typeof createImageBitmap === "function") {
+    return createImageBitmap(file);
+  }
+
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Não foi possível carregar a imagem."));
+    };
+
+    image.src = objectUrl;
+  });
+};
+
+const getBrowserImageSize = (image: ImageBitmap | HTMLImageElement) => {
+  if (image instanceof HTMLImageElement) {
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    };
+  }
+
+  return {
+    width: image.width,
+    height: image.height,
+  };
+};
+
+const canvasToBlob = (canvas: HTMLCanvasElement, quality: number) =>
+  new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+
+        reject(new Error("Não foi possível otimizar a imagem."));
+      },
+      "image/webp",
+      quality,
+    );
+  });
+
+const optimizeMenuItemImageForUpload = async (file: File): Promise<OptimizedImageUpload> => {
+  if (file.type === "image/svg+xml") {
+    return {
+      blob: file,
+      extension: getSafeImageExtension(file),
+      contentType: file.type,
+    };
+  }
+
+  const image = await loadBrowserImage(file);
+  const { width, height } = getBrowserImageSize(image);
+  const largestSide = Math.max(width, height);
+  const scale = largestSide > menuItemImageMaxDimension ? menuItemImageMaxDimension / largestSide : 1;
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Não foi possível preparar a imagem.");
+  }
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  if ("close" in image) {
+    image.close();
+  }
+
+  let optimizedBlob = await canvasToBlob(canvas, menuItemImageQualitySteps[0]);
+
+  for (const quality of menuItemImageQualitySteps.slice(1)) {
+    if (optimizedBlob.size <= menuItemImageMaxUploadSize) {
+      break;
+    }
+
+    optimizedBlob = await canvasToBlob(canvas, quality);
+  }
+
+  return {
+    blob: optimizedBlob,
+    extension: "webp",
+    contentType: "image/webp",
+  };
+};
+
 export const uploadMenuItemImage = async (storeId: string, file: File) => {
-  const extension = getSafeImageExtension(file);
+  const optimizedImage = await optimizeMenuItemImageForUpload(file);
   const imageRef = ref(
     firebaseStorage,
-    `stores/${storeId}/public/menu-items/${Date.now()}-${crypto.randomUUID()}.${extension}`,
+    `stores/${storeId}/public/menu-items/${Date.now()}-${crypto.randomUUID()}.${optimizedImage.extension}`,
   );
-  const snapshot = await uploadBytes(imageRef, file, {
-    contentType: file.type || "image/jpeg",
+  const snapshot = await uploadBytes(imageRef, optimizedImage.blob, {
+    contentType: optimizedImage.contentType,
   });
 
   return getDownloadURL(snapshot.ref);

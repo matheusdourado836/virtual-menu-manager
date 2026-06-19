@@ -135,9 +135,21 @@
   }
 
   &__categories {
+    position: sticky;
+    top: var(--space-4);
+    z-index: 2;
+    min-width: 0;
+    min-height: calc(var(--button-height) + (var(--space-2) * 2));
     display: flex;
+    align-items: center;
     gap: var(--space-2);
+    padding: var(--space-2);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-lg);
     overflow-x: auto;
+    overflow-y: hidden;
+    background: color-mix(in srgb, var(--admin-color-surface) 94%, var(--admin-color-surface-muted));
+    box-shadow: var(--shadow-admin);
   }
 
   &__category,
@@ -175,7 +187,11 @@
 
   &__category {
     flex: 0 0 auto;
-    padding: 0 var(--space-3);
+    min-width: max-content;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+    line-height: var(--line-tight);
+    white-space: nowrap;
 
     &--active,
     &--active:hover {

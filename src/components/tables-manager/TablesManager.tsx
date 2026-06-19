@@ -5,6 +5,7 @@ import { Copy, Plus, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { createTable } from "@/lib/services/store-service";
+import { getPublicAppUrl } from "@/lib/utils/public-url";
 import type { Table } from "@/types/menu";
 import "./tables-manager.scss";
 
@@ -31,13 +32,7 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
     [localTables, tables],
   );
 
-  const baseUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "TODO_CONFIG_PUBLIC_BASE_URL";
-    }
-
-    return window.location.origin;
-  }, []);
+  const baseUrl = useMemo(() => getPublicAppUrl(), []);
 
   useEffect(() => {
     visibleTables.forEach((table) => {

@@ -20,7 +20,7 @@ interface MenuItemEditorDialogProps {
 }
 
 const createCategoryOptionValue = "__create_category__";
-const maxImageSizeInBytes = 5 * 1024 * 1024;
+const maxSourceImageSizeInBytes = 15 * 1024 * 1024;
 const defaultAdditionalGroupId = "adicionais";
 
 export function MenuItemEditorDialog({
@@ -118,8 +118,8 @@ export function MenuItemEditorDialog({
       return;
     }
 
-    if (imageFile && imageFile.size > maxImageSizeInBytes) {
-      setError("A imagem deve ter até 5 MB.");
+    if (imageFile && imageFile.size > maxSourceImageSizeInBytes) {
+      setError("A imagem original deve ter até 15 MB.");
       return;
     }
 
@@ -194,8 +194,8 @@ export function MenuItemEditorDialog({
       return;
     }
 
-    if (file.size > maxImageSizeInBytes) {
-      setError("A imagem deve ter até 5 MB.");
+    if (file.size > maxSourceImageSizeInBytes) {
+      setError("A imagem original deve ter até 15 MB.");
       return;
     }
 
