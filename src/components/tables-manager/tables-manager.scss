@@ -36,6 +36,7 @@
   }
 
   &__add,
+  &__copy-link,
   &__table-order {
     display: inline-flex;
     align-items: center;
@@ -99,6 +100,13 @@
     gap: var(--space-3);
   }
 
+  &__header-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
   &__heading {
     display: grid;
     gap: var(--space-1);
@@ -114,8 +122,7 @@
     font-weight: 900;
   }
 
-  &__icon-button,
-  &__copy {
+  &__icon-button {
     display: inline-grid;
     place-items: center;
     width: var(--button-height);
@@ -165,15 +172,6 @@
     }
   }
 
-  &__copy {
-    &--copied {
-      border-color: var(--color-success);
-      color: var(--color-success);
-      background: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
-      box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--color-success) 14%, transparent);
-    }
-  }
-
   &__qr {
     display: grid;
     place-items: center;
@@ -188,10 +186,7 @@
   }
 
   &__link {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-2);
+    min-width: 0;
   }
 
   &__link-text {
@@ -203,6 +198,7 @@
     white-space: nowrap;
   }
 
+  &__copy-link,
   &__table-order {
     width: 100%;
     border: var(--border-thin) solid var(--admin-color-border);
@@ -214,9 +210,16 @@
     }
   }
 
+  &__copy-link {
+    &--copied {
+      border-color: var(--color-success);
+      color: var(--color-success);
+      background: color-mix(in srgb, var(--color-success) 8%, var(--admin-color-surface-muted));
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    &__icon-button,
-    &__copy {
+    &__icon-button {
       transition: none;
     }
   }

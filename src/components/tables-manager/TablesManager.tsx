@@ -1,7 +1,7 @@
 "use client";
 
 import QRCode from "qrcode";
-import { Check, Copy, Plus, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
+import { Check, Copy, Plus, Printer, QrCode, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { createTable, updateTable } from "@/lib/services/store-service";
@@ -16,6 +16,19 @@ interface TablesManagerProps {
   onCreateOrder: (tableId?: string) => void;
   onFeedback?: (message: string, variant?: "success" | "error" | "info") => void;
 }
+
+const escapePrintText = (value: string) =>
+  value.replace(/[&<>"']/gu, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+
+    return entities[character] || character;
+  });
 
 export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFeedback }: TablesManagerProps) {
   const [localTables, setLocalTables] = useState<Table[]>([]);
@@ -36,15 +49,30 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
   );
 
   const baseUrl = useMemo(() => getPublicAppUrl(), []);
+  const tableCards = useMemo(
+    () =>
+      visibleTables.map((table) => {
+        const isMenuLink = table.code === "BALCAO";
+        const link = isMenuLink ? `${baseUrl}/loja/${storeSlug}` : `${baseUrl}/loja/${storeSlug}/mesa/${table.id}`;
+
+        return {
+          table,
+          isMenuLink,
+          link,
+          title: isMenuLink ? "Cardápio" : table.label,
+          subtitle: isMenuLink ? "Link pro cardápio" : table.code,
+        };
+      }),
+    [baseUrl, storeSlug, visibleTables],
+  );
 
   useEffect(() => {
-    visibleTables.forEach((table) => {
-      const url = `${baseUrl}/loja/${storeSlug}/mesa/${table.id}`;
-      QRCode.toDataURL(url, { margin: 1, width: 180 }).then((dataUrl) => {
-        setQrCodes((state) => ({ ...state, [table.id]: dataUrl }));
+    tableCards.forEach((card) => {
+      QRCode.toDataURL(card.link, { margin: 1, width: 180 }).then((dataUrl) => {
+        setQrCodes((state) => ({ ...state, [card.table.id]: dataUrl }));
       });
     });
-  }, [baseUrl, storeSlug, visibleTables]);
+  }, [tableCards]);
 
   useEffect(() => {
     if (!copiedTableId) {
@@ -123,14 +151,73 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
     }
   };
 
-  const copyLink = async (tableId: string) => {
+  const copyLink = async (tableId: string, link: string, isMenuLink: boolean) => {
     try {
-      await navigator.clipboard.writeText(`${baseUrl}/loja/${storeSlug}/mesa/${tableId}`);
+      await navigator.clipboard.writeText(link);
       setCopiedTableId(tableId);
-      onFeedback?.("Link da mesa copiado pra área de transferência.");
+      onFeedback?.(
+        isMenuLink ? "Link do cardápio copiado pra área de transferência." : "Link da mesa copiado pra área de transferência.",
+      );
     } catch {
       onFeedback?.("Não foi possível copiar o link.", "error");
     }
+  };
+
+  const printQrCode = (title: string, qrCode?: string) => {
+    if (!qrCode) {
+      onFeedback?.("QR Code ainda carregando.", "info");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=420,height=520");
+
+    if (!printWindow) {
+      onFeedback?.("Não foi possível abrir a impressão.", "error");
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapePrintText(title)}</title>
+          <style>
+            @page { margin: 0; }
+            html,
+            body {
+              width: 100%;
+              height: 100%;
+              margin: 0;
+            }
+            body {
+              display: grid;
+              place-items: center;
+            }
+            img {
+              width: 72vmin;
+              height: 72vmin;
+              object-fit: contain;
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${qrCode}" alt="QR Code" />
+        </body>
+      </html>`);
+    printWindow.document.close();
+
+    const qrImage = printWindow.document.querySelector("img");
+    const runPrint = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+
+    if (qrImage?.complete) {
+      runPrint();
+      return;
+    }
+
+    qrImage?.addEventListener("load", runPrint, { once: true });
   };
 
   return (
@@ -154,41 +241,54 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
       </div>
 
       <div className="tables-manager__grid">
-        {visibleTables.map((table) => {
-          const link = `${baseUrl}/loja/${storeSlug}/mesa/${table.id}`;
+        {tableCards.map(({ table, isMenuLink, link, title, subtitle }) => {
           const isCopied = copiedTableId === table.id;
           const didSwitchChange = changedTableId === table.id;
           const isUpdating = updatingTableId === table.id;
+          const qrCode = qrCodes[table.id];
 
           return (
             <article className="tables-manager__table" key={table.id}>
               <div className="tables-manager__header">
                 <div className="tables-manager__heading">
-                  <h2 className="tables-manager__title">{table.label}</h2>
-                  <span className="tables-manager__code">{table.code}</span>
+                  <h2 className="tables-manager__title">{title}</h2>
+                  <span className="tables-manager__code">{subtitle}</span>
                 </div>
-                <button
-                  className={`tables-manager__icon-button tables-manager__icon-button--switch${
-                    table.isActive ? " tables-manager__icon-button--active" : ""
-                  }${didSwitchChange ? " tables-manager__icon-button--changed" : ""}`}
-                  type="button"
-                  onClick={() => void toggleTable(table.id)}
-                  role="switch"
-                  aria-checked={table.isActive}
-                  aria-label={table.isActive ? "Desativar mesa" : "Ativar mesa"}
-                  title={table.isActive ? "Desativar mesa" : "Ativar mesa"}
-                  disabled={isUpdating}
-                >
-                  {table.isActive ? <ToggleRight size={24} aria-hidden /> : <ToggleLeft size={24} aria-hidden />}
-                </button>
+                <div className="tables-manager__header-actions">
+                  <button
+                    className="tables-manager__icon-button"
+                    type="button"
+                    onClick={() => printQrCode(title, qrCode)}
+                    aria-label="Imprimir QR Code"
+                    title="Imprimir QR Code"
+                  >
+                    <Printer size={18} aria-hidden />
+                  </button>
+                  {isMenuLink ? null : (
+                    <button
+                      className={`tables-manager__icon-button tables-manager__icon-button--switch${
+                        table.isActive ? " tables-manager__icon-button--active" : ""
+                      }${didSwitchChange ? " tables-manager__icon-button--changed" : ""}`}
+                      type="button"
+                      onClick={() => void toggleTable(table.id)}
+                      role="switch"
+                      aria-checked={table.isActive}
+                      aria-label={table.isActive ? "Desativar mesa" : "Ativar mesa"}
+                      title={table.isActive ? "Desativar mesa" : "Ativar mesa"}
+                      disabled={isUpdating}
+                    >
+                      {table.isActive ? <ToggleRight size={24} aria-hidden /> : <ToggleLeft size={24} aria-hidden />}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="tables-manager__qr">
-                {qrCodes[table.id] ? (
+                {qrCode ? (
                   <Image
                     className="tables-manager__qr-image"
-                    src={qrCodes[table.id]}
-                    alt={`QR Code ${table.label}`}
+                    src={qrCode}
+                    alt={`QR Code ${title}`}
                     width={180}
                     height={180}
                     unoptimized
@@ -200,20 +300,24 @@ export function TablesManager({ storeId, tables, storeSlug, onCreateOrder, onFee
 
               <div className="tables-manager__link">
                 <span className="tables-manager__link-text">{link}</span>
-                <button
-                  className={`tables-manager__copy${isCopied ? " tables-manager__copy--copied" : ""}`}
-                  type="button"
-                  onClick={() => void copyLink(table.id)}
-                  aria-label={isCopied ? "Link copiado" : "Copiar link"}
-                  title={isCopied ? "Link copiado" : "Copiar link"}
-                >
-                  {isCopied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
-                </button>
               </div>
 
-              <button className="tables-manager__table-order" type="button" onClick={() => onCreateOrder(table.id)}>
+              <button
+                className={`tables-manager__copy-link${isCopied ? " tables-manager__copy-link--copied" : ""}`}
+                type="button"
+                onClick={() => void copyLink(table.id, link, isMenuLink)}
+              >
+                {isCopied ? <Check size={17} aria-hidden /> : <Copy size={17} aria-hidden />}
+                {isCopied ? "Link copiado" : isMenuLink ? "Copiar link do cardápio" : "Copiar link da mesa"}
+              </button>
+
+              <button
+                className="tables-manager__table-order"
+                type="button"
+                onClick={() => onCreateOrder(isMenuLink ? undefined : table.id)}
+              >
                 <ShoppingBag size={17} aria-hidden />
-                Criar pedido para {table.label}
+                {isMenuLink ? "Criar pedido pelo Cardápio" : `Criar pedido para ${table.label}`}
               </button>
             </article>
           );
