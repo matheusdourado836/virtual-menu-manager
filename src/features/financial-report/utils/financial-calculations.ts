@@ -7,6 +7,7 @@ import type {
   FinancialReportRange,
   PaymentBreakdownItem,
   TimeSalesBucket,
+  TopAdditionalItem,
   TopProductItem,
 } from "../types/financial-report.types";
 
@@ -218,6 +219,40 @@ const buildTopProducts = (sales: Order[], grossRevenue: number): TopProductItem[
     .sort((left, right) => right.quantity - left.quantity || right.total - left.total);
 };
 
+const buildTopAdditionals = (sales: Order[], additionalRevenue: number): TopAdditionalItem[] => {
+  const additionals = new Map<string, TopAdditionalItem & { orderIds: Set<string> }>();
+
+  sales.forEach((order) => {
+    order.items.forEach((item) => {
+      item.selectedOptions.forEach((option) => {
+        const choiceId = option.choiceId || `${option.groupId}:${option.choiceName}`;
+        const current = additionals.get(choiceId) || {
+          choiceId,
+          name: option.choiceName,
+          quantity: 0,
+          orders: 0,
+          total: 0,
+          percentage: 0,
+          orderIds: new Set<string>(),
+        };
+
+        current.quantity += item.quantity;
+        current.total += Number(option.price || 0) * item.quantity;
+        current.orderIds.add(order.id);
+        additionals.set(choiceId, current);
+      });
+    });
+  });
+
+  return Array.from(additionals.values())
+    .map(({ orderIds, ...item }) => ({
+      ...item,
+      orders: orderIds.size,
+      percentage: additionalRevenue > 0 ? (item.total / additionalRevenue) * 100 : 0,
+    }))
+    .sort((left, right) => right.quantity - left.quantity || right.total - left.total);
+};
+
 export const calculateFinancialReport = (
   orders: Order[],
   filters: FinancialReportFilters,
@@ -235,6 +270,23 @@ export const calculateFinancialReport = (
   const cancelledValue = cancelledOrders.reduce((total, order) => total + Number(order.total), 0);
   const salesByTime = buildSalesByTime(sales, groupBy);
   const topProducts = buildTopProducts(sales, grossRevenue);
+  const additionalRevenue = sales.reduce(
+    (total, order) =>
+      total +
+      order.items.reduce(
+        (itemTotal, item) =>
+          itemTotal +
+          item.selectedOptions.reduce((optionTotal, option) => optionTotal + Number(option.price || 0), 0) *
+            item.quantity,
+        0,
+      ),
+    0,
+  );
+  const topAdditionals = buildTopAdditionals(sales, additionalRevenue);
+  const soldAdditionals = topAdditionals.reduce((total, item) => total + item.quantity, 0);
+  const ordersWithAdditionals = sales.filter((order) =>
+    order.items.some((item) => item.selectedOptions.length > 0),
+  ).length;
   const bestSalesTime = [...salesByTime].sort((left, right) => right.total - left.total || right.orders - left.orders)[0];
 
   return {
@@ -244,14 +296,19 @@ export const calculateFinancialReport = (
     paymentBreakdown: buildPaymentBreakdown(sales, grossRevenue),
     salesByTime,
     topProducts,
+    topAdditionals,
     summary: {
       grossRevenue,
       finalizedOrders,
       averageTicket: finalizedOrders > 0 ? grossRevenue / finalizedOrders : 0,
       soldItems,
+      additionalRevenue,
+      soldAdditionals,
+      ordersWithAdditionals,
       cancelledOrders: cancelledOrders.length,
       cancelledValue,
       topProductName: topProducts[0]?.name || "Sem vendas",
+      topAdditionalName: topAdditionals[0]?.name || "Sem adicionais",
       bestSalesTime: bestSalesTime?.label || "Sem vendas",
     },
   };

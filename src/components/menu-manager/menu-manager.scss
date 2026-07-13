@@ -51,7 +51,8 @@
       box-shadow: var(--focus-ring);
     }
 
-    &--active {
+    &--active,
+    &--active:hover {
       color: var(--admin-color-sidebar-text);
       background: var(--admin-color-sidebar);
       box-shadow: var(--shadow-panel);

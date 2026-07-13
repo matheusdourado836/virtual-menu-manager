@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, Clock3, Coffee, MapPin, Plus, ShoppingBag, Utensils } from "lucide-react";
+import { AlertTriangle, Clock3, Coffee, MapPin, Plus, ShoppingBag, Utensils, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { MenuItemDialog } from "@/components/menu-item-dialog/MenuItemDialog";
 import { ThemeScope } from "@/components/theme-scope/ThemeScope";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
@@ -40,6 +40,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [previewItem, setPreviewItem] = useState<MenuItem | null>(null);
   const [trackedOrderId, setTrackedOrderId] = useState("");
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => new Date());
@@ -170,6 +171,22 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   };
 
   const closeItem = useCallback(() => setSelectedItem(null), []);
+  const closePreview = useCallback(() => setPreviewItem(null), []);
+
+  useEffect(() => {
+    if (!previewItem) {
+      return undefined;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePreview();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [closePreview, previewItem]);
 
   const cartLink = table?.id ? `/loja/${slug}/mesa/${table.id}/carrinho` : `/loja/${slug}/carrinho`;
   const cartQuantity = getCartQuantity(cartLines);
@@ -185,6 +202,11 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     }
 
     setSelectedItem(item);
+  };
+
+  const openItemImage = (event: MouseEvent<HTMLButtonElement>, item: MenuItem) => {
+    event.stopPropagation();
+    setPreviewItem(item);
   };
 
   if (isLoading) {
@@ -290,14 +312,23 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                 }}
                 aria-label={`Adicionar ${item.name}`}
               >
-                <Image
-                  className="public-menu__item-image"
-                  src={item.imageUrl || "/placeholder-item.svg"}
-                  alt=""
-                  width={120}
-                  height={120}
-                  unoptimized
-                />
+                <button
+                  className="public-menu__item-image-button"
+                  type="button"
+                  onClick={(event) => openItemImage(event, item)}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  aria-label={`Ver foto de ${item.name}`}
+                  title={`Ver foto de ${item.name}`}
+                >
+                  <Image
+                    className="public-menu__item-image"
+                    src={item.imageUrl || "/placeholder-item.svg"}
+                    alt=""
+                    width={120}
+                    height={120}
+                    unoptimized
+                  />
+                </button>
                 <div className="public-menu__item-body">
                   <div className="public-menu__item-copy">
                     <h3 className="public-menu__item-title">{item.name}</h3>
@@ -352,7 +383,9 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
             item={selectedItem}
             note={notes[selectedItem.id] || ""}
             selectedOptionIds={selectedOptions[selectedItem.id] || []}
+            isImagePreviewOpen={Boolean(previewItem)}
             onClose={closeItem}
+            onImagePreview={() => setPreviewItem(selectedItem)}
             onNoteChange={(note) => setNotes((state) => ({ ...state, [selectedItem.id]: note }))}
             onToggleOption={(groupId, choiceId, maxSelected) =>
               toggleOption(selectedItem, groupId, choiceId, maxSelected)
@@ -367,6 +400,36 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
               addItem(selectedItem, quantity);
             }}
           />
+        ) : null}
+
+        {previewItem ? (
+          <div className="public-menu__image-preview" role="presentation" onMouseDown={closePreview}>
+            <section
+              className="public-menu__image-preview-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Foto de ${previewItem.name}`}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                className="public-menu__image-preview-close"
+                type="button"
+                onClick={closePreview}
+                aria-label="Fechar foto"
+              >
+                <X size={20} aria-hidden />
+              </button>
+              <Image
+                className="public-menu__image-preview-image"
+                src={previewItem.imageUrl || "/placeholder-item.svg"}
+                alt={previewItem.name}
+                width={960}
+                height={960}
+                unoptimized
+              />
+              <strong className="public-menu__image-preview-title">{previewItem.name}</strong>
+            </section>
+          </div>
         ) : null}
 
         {notice ? <Snackbar message={notice} onDismiss={() => setNotice("")} /> : null}

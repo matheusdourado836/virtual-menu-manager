@@ -1,8 +1,7 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, Clock3, Search, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, ExternalLink, Loader2, Search, Send, Star, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
@@ -12,9 +11,9 @@ import {
   readStoredOrderMenuPath,
   writeMenuNotice,
 } from "@/features/order-tracking/order-tracking-storage";
-import { getStoreById, subscribeOrder } from "@/lib/services/store-service";
+import { getStoreById, submitOrderFeedback, subscribeOrder } from "@/lib/services/store-service";
 import { formatCurrency } from "@/lib/utils/money";
-import type { Order, OrderStatus } from "@/types/menu";
+import type { Order, OrderStatus, Store } from "@/types/menu";
 import "./order-tracker.scss";
 
 const progressStatuses = ["received", "preparing", "ready", "delivered"] as const;
@@ -47,11 +46,16 @@ interface OrderTrackerProps {
 }
 
 export function OrderTracker({ orderId }: OrderTrackerProps) {
-  const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
+  const [store, setStore] = useState<Store | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [menuLink, setMenuLink] = useState(() => readStoredOrderMenuPath(orderId));
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const hasRedirected = useRef(false);
 
   useEffect(() => {
@@ -77,7 +81,7 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
   }, [orderId]);
 
   useEffect(() => {
-    if (!order || menuLink) {
+    if (!order || store) {
       return;
     }
 
@@ -89,6 +93,7 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
           return;
         }
 
+        setStore(store);
         setMenuLink(order.tableId ? `/loja/${store.slug}/mesa/${order.tableId}` : `/loja/${store.slug}`);
       })
       .catch(() => {
@@ -100,22 +105,52 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
     return () => {
       isMounted = false;
     };
-  }, [menuLink, order]);
+  }, [order, store]);
 
   useEffect(() => {
-    if (!order || order.status !== "delivered" || !menuLink || hasRedirected.current) {
+    if (!order || order.status !== "delivered" || hasRedirected.current) {
       return;
     }
 
     hasRedirected.current = true;
     clearStoredOrderReference(order.storeId, order.tableId, order.id);
-    writeMenuNotice(menuLink, "Pedido finalizado com sucesso.");
-    router.replace(menuLink);
-  }, [menuLink, order, router]);
+  }, [order]);
 
   const activeIndex = useMemo(() => {
     return order ? progressIndexByStatus[order.status] : -1;
   }, [order]);
+  const googleReviewUrl = store?.googleReviewUrl?.trim();
+
+  const markMenuReturnNotice = () => {
+    if (menuLink) {
+      writeMenuNotice(menuLink, "Pedido finalizado com sucesso.");
+    }
+  };
+
+  const submitFeedback = async () => {
+    if (!order || isSubmittingFeedback) {
+      return;
+    }
+
+    setFeedbackError("");
+    setFeedbackMessage("");
+    setIsSubmittingFeedback(true);
+
+    try {
+      const result = await submitOrderFeedback({
+        orderId: order.id,
+        rating,
+        comment: comment.trim(),
+      });
+
+      setFeedbackMessage(result.alreadySubmitted ? "Sua avaliação já foi registrada." : "Obrigado pela avaliação.");
+      setComment("");
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : "Não foi possível enviar sua avaliação.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -139,6 +174,103 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
           />
           {menuLink ? (
             <Link className="order-tracker__empty-action" href={menuLink}>
+              <ArrowLeft size={17} aria-hidden />
+              Voltar ao cardápio
+            </Link>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
+
+  if (order.status === "delivered") {
+    return (
+      <main className="order-tracker">
+        <section className="order-tracker__card order-tracker__card--finished">
+          <div className="order-tracker__finished-icon">
+            <CheckCircle2 size={30} aria-hidden />
+          </div>
+
+          <div className="order-tracker__finished-heading">
+            <span className="order-tracker__eyebrow">Pedido finalizado</span>
+            <h1 className="order-tracker__title">Obrigado pelo pedido {order.code}</h1>
+            <p className="order-tracker__finished-text">
+              Sua experiência ajuda a loja a melhorar o atendimento.
+            </p>
+          </div>
+
+          <div className="order-tracker__finished-summary">
+            <span className="order-tracker__finished-label">Cliente</span>
+            <strong>{order.customerName}</strong>
+            <span className="order-tracker__finished-label">Total</span>
+            <strong>{formatCurrency(order.total)}</strong>
+          </div>
+
+          {googleReviewUrl ? (
+            <div className="order-tracker__review-card">
+              <h2 className="order-tracker__review-title">Avalie no Google</h2>
+              <p className="order-tracker__review-text">
+                Toque no botão abaixo para abrir a página oficial de avaliação da loja.
+              </p>
+              <a
+                className="order-tracker__review-action"
+                href={googleReviewUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={18} aria-hidden />
+                Avaliar no Google
+              </a>
+            </div>
+          ) : (
+            <div className="order-tracker__review-card">
+              <h2 className="order-tracker__review-title">Como foi sua experiência?</h2>
+              <div className="order-tracker__rating" aria-label="Nota da avaliação">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    className={`order-tracker__rating-button${
+                      value <= rating ? " order-tracker__rating-button--selected" : ""
+                    }`}
+                    type="button"
+                    key={value}
+                    onClick={() => setRating(value)}
+                    aria-label={`${value} estrela${value === 1 ? "" : "s"}`}
+                    aria-pressed={value <= rating}
+                  >
+                    <Star size={24} aria-hidden />
+                  </button>
+                ))}
+              </div>
+
+              <label className="order-tracker__feedback-field">
+                <span>Comentário opcional</span>
+                <textarea
+                  className="order-tracker__feedback-textarea"
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  rows={4}
+                  maxLength={500}
+                  placeholder="Conte rapidamente como foi o atendimento..."
+                />
+              </label>
+
+              {feedbackError ? <p className="order-tracker__feedback-error">{feedbackError}</p> : null}
+              {feedbackMessage ? <p className="order-tracker__feedback-success">{feedbackMessage}</p> : null}
+
+              <button
+                className="order-tracker__review-action"
+                type="button"
+                onClick={() => void submitFeedback()}
+                disabled={isSubmittingFeedback || Boolean(feedbackMessage)}
+              >
+                {isSubmittingFeedback ? <Loader2 className="order-tracker__spinner" size={18} aria-hidden /> : <Send size={18} aria-hidden />}
+                {isSubmittingFeedback ? "Enviando" : "Enviar avaliação"}
+              </button>
+            </div>
+          )}
+
+          {menuLink ? (
+            <Link className="order-tracker__empty-action" href={menuLink} onClick={markMenuReturnNotice}>
               <ArrowLeft size={17} aria-hidden />
               Voltar ao cardápio
             </Link>

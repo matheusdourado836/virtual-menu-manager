@@ -1,10 +1,14 @@
 "use client";
 
+import { arrayMove } from "@dnd-kit/helpers";
+import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortable } from "@dnd-kit/react/sortable";
 import Image from "next/image";
 import { ChevronDown, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
 import { AdditionalEditorDialog } from "@/components/additional-editor-dialog/AdditionalEditorDialog";
 import { MenuItemEditorDialog } from "@/components/menu-item-editor-dialog/MenuItemEditorDialog";
+import { SortableAdditionalRow } from "@/components/menu-manager/sortable-additional-row/SortableAdditionalRow";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import {
   createAdditional,
@@ -12,6 +16,7 @@ import {
   createMenuItem,
   deleteAdditional,
   deleteMenuItem,
+  reorderAdditionals,
   updateAdditional,
   updateMenuItem,
   type AdditionalInput,
@@ -37,6 +42,38 @@ export interface MenuManagerHandle {
 type MenuManagerSection = "items" | "additionals";
 const placeholderItemImage = "/placeholder-item.svg";
 
+const compareAvailability = (first: boolean, second: boolean) => {
+  if (first === second) {
+    return 0;
+  }
+
+  return first ? -1 : 1;
+};
+
+const sortMenuEntries = <T extends { isAvailable: boolean; name: string; order: number }>(
+  entries: T[],
+  options: { useCurrentPosition?: boolean } = {},
+) =>
+  entries
+    .map((entry, index) => ({
+      entry,
+      fallbackOrder: options.useCurrentPosition
+        ? index + 1
+        : Number.isFinite(entry.order)
+          ? entry.order
+          : index + 1,
+    }))
+    .sort(
+      (first, second) =>
+        compareAvailability(first.entry.isAvailable, second.entry.isAvailable) ||
+        first.fallbackOrder - second.fallbackOrder ||
+        first.entry.name.localeCompare(second.entry.name),
+    )
+    .map(({ entry, fallbackOrder }) => ({
+      ...entry,
+      order: fallbackOrder,
+    }));
+
 function MenuManagerComponent(
   { storeId, categories, additionals, menuItems, onChanged, onFeedback }: MenuManagerProps,
   ref: ForwardedRef<MenuManagerHandle>,
@@ -47,6 +84,8 @@ function MenuManagerComponent(
   const [editingAdditional, setEditingAdditional] = useState<Additional | null>(null);
   const [additionalToDelete, setAdditionalToDelete] = useState<Additional | null>(null);
   const [isSavingAdditional, setIsSavingAdditional] = useState(false);
+  const [isSavingAdditionalOrder, setIsSavingAdditionalOrder] = useState(false);
+  const [localAdditionalOrderIds, setLocalAdditionalOrderIds] = useState<string[]>([]);
   const [deletingAdditionalId, setDeletingAdditionalId] = useState("");
   const [activeSection, setActiveSection] = useState<MenuManagerSection>("items");
   const [isCreatingItem, setIsCreatingItem] = useState(false);
@@ -66,20 +105,24 @@ function MenuManagerComponent(
     () =>
       activeCategories.map((category) => ({
         category,
-        items: menuItems.filter((item) => item.categoryId === category.id),
+        items: sortMenuEntries(menuItems.filter((item) => item.categoryId === category.id)),
       })),
     [activeCategories, menuItems],
   );
-  const sortedAdditionals = useMemo(
-    () =>
-      additionals
-        .map((additional, index) => ({
-          ...additional,
-          order: Number.isFinite(additional.order) ? additional.order : index + 1,
-        }))
-        .sort((first, second) => first.order - second.order || first.name.localeCompare(second.name)),
-    [additionals],
-  );
+  const sortedAdditionals = useMemo(() => {
+    if (!localAdditionalOrderIds.length) {
+      return sortMenuEntries(additionals);
+    }
+
+    const additionalById = new Map(additionals.map((additional) => [additional.id, additional]));
+    const orderedAdditionals = localAdditionalOrderIds
+      .map((additionalId) => additionalById.get(additionalId))
+      .filter((additional): additional is Additional => Boolean(additional));
+    const orderedIds = new Set(orderedAdditionals.map((additional) => additional.id));
+    const missingAdditionals = sortMenuEntries(additionals).filter((additional) => !orderedIds.has(additional.id));
+
+    return sortMenuEntries([...orderedAdditionals, ...missingAdditionals], { useCurrentPosition: true });
+  }, [additionals, localAdditionalOrderIds]);
   const isEditorOpen = isCreatingItem || Boolean(editingItem);
   const isAdditionalEditorOpen = isCreatingAdditional || Boolean(editingAdditional);
   const selectableItemsCount = useMemo(
@@ -183,6 +226,47 @@ function MenuManagerComponent(
       throw error;
     } finally {
       setIsSavingAdditional(false);
+    }
+  };
+
+  const finishAdditionalOrderDrag = async (event: DragEndEvent) => {
+    if (event.canceled || isSavingAdditionalOrder) {
+      return;
+    }
+
+    const { source } = event.operation;
+
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return;
+    }
+
+    if (
+      source.initialIndex < 0 ||
+      source.index < 0 ||
+      source.initialIndex >= sortedAdditionals.length ||
+      source.index >= sortedAdditionals.length
+    ) {
+      return;
+    }
+
+    const nextAdditionals = sortMenuEntries(arrayMove(sortedAdditionals, source.initialIndex, source.index), {
+      useCurrentPosition: true,
+    });
+    const nextAdditionalIds = nextAdditionals.map((additional) => additional.id);
+
+    setLocalAdditionalOrderIds(nextAdditionalIds);
+    setIsSavingAdditionalOrder(true);
+
+    try {
+      await reorderAdditionals(storeId, nextAdditionalIds);
+      await onChanged();
+      setLocalAdditionalOrderIds([]);
+      onFeedback("Ordem global dos adicionais salva.");
+    } catch (error) {
+      setLocalAdditionalOrderIds([]);
+      onFeedback(error instanceof Error ? error.message : "Não foi possível salvar a ordem dos adicionais.", "error");
+    } finally {
+      setIsSavingAdditionalOrder(false);
     }
   };
 
@@ -493,45 +577,24 @@ function MenuManagerComponent(
               </button>
             </div>
 
-            <div className="menu-manager__additional-list">
-              {sortedAdditionals.length ? (
-                sortedAdditionals.map((additional) => (
-                  <article
-                    className={`menu-manager__additional${additional.isAvailable ? "" : " menu-manager__additional--disabled"}`}
-                    key={additional.id}
-                  >
-                    <span className="menu-manager__additional-copy">
-                      <strong className="menu-manager__additional-name">{additional.name}</strong>
-                      <small className="menu-manager__additional-price">{formatCurrency(additional.price)}</small>
-                    </span>
-                    <span className="menu-manager__additional-buttons">
-                      <button
-                        className="menu-manager__icon-button"
-                        type="button"
-                        onClick={() => startEditingAdditional(additional)}
-                        disabled={isSavingAdditional || Boolean(deletingAdditionalId)}
-                        aria-label={`Editar ${additional.name}`}
-                        title={`Editar ${additional.name}`}
-                      >
-                        <Pencil size={18} aria-hidden />
-                      </button>
-                      <button
-                        className="menu-manager__icon-button menu-manager__icon-button--danger"
-                        type="button"
-                        onClick={() => setAdditionalToDelete(additional)}
-                        disabled={isSavingAdditional || Boolean(deletingAdditionalId)}
-                        aria-label={`Excluir ${additional.name}`}
-                        title={`Excluir ${additional.name}`}
-                      >
-                        <Trash2 size={18} aria-hidden />
-                      </button>
-                    </span>
-                  </article>
-                ))
-              ) : (
-                <p className="menu-manager__empty-text">Nenhum adicional cadastrado.</p>
-              )}
-            </div>
+            {sortedAdditionals.length ? (
+              <DragDropProvider onDragEnd={finishAdditionalOrderDrag}>
+                <div className="menu-manager__additional-list">
+                  {sortedAdditionals.map((additional, index) => (
+                    <SortableAdditionalRow
+                      additional={additional}
+                      index={index}
+                      isBusy={isSavingAdditional || isSavingAdditionalOrder || Boolean(deletingAdditionalId)}
+                      onEdit={startEditingAdditional}
+                      onDelete={setAdditionalToDelete}
+                      key={additional.id}
+                    />
+                  ))}
+                </div>
+              </DragDropProvider>
+            ) : (
+              <p className="menu-manager__empty-text">Nenhum adicional cadastrado.</p>
+            )}
           </div>
         </div>
       ) : null}

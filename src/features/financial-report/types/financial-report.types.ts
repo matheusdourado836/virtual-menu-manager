@@ -27,9 +27,13 @@ export interface FinancialSummary {
   finalizedOrders: number;
   averageTicket: number;
   soldItems: number;
+  additionalRevenue: number;
+  soldAdditionals: number;
+  ordersWithAdditionals: number;
   cancelledOrders: number;
   cancelledValue: number;
   topProductName: string;
+  topAdditionalName: string;
   bestSalesTime: string;
 }
 
@@ -56,12 +60,22 @@ export interface TopProductItem {
   percentage: number;
 }
 
+export interface TopAdditionalItem {
+  choiceId: string;
+  name: string;
+  quantity: number;
+  orders: number;
+  total: number;
+  percentage: number;
+}
+
 export interface FinancialReportData {
   orders: Order[];
   summary: FinancialSummary;
   paymentBreakdown: PaymentBreakdownItem[];
   salesByTime: TimeSalesBucket[];
   topProducts: TopProductItem[];
+  topAdditionals: TopAdditionalItem[];
   cancelledOrders: Order[];
   groupBy: FinancialGroupBy;
 }

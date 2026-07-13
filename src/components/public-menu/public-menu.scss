@@ -295,6 +295,21 @@
     box-shadow: 0 0 0 var(--border-thin) color-mix(in srgb, var(--color-secondary) 28%, var(--color-border-strong));
   }
 
+  &__item-image-button {
+    width: var(--menu-card-image-size);
+    height: var(--menu-card-image-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: zoom-in;
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
   &__item-body {
     align-content: space-between;
     gap: var(--space-3);
@@ -465,6 +480,64 @@
     font-size: var(--text-sm);
     font-weight: 800;
     white-space: nowrap;
+  }
+
+  &__image-preview {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-dialog) + 1);
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    background: color-mix(in srgb, var(--color-text) 72%, transparent);
+    backdrop-filter: blur(var(--space-2));
+  }
+
+  &__image-preview-panel {
+    position: relative;
+    width: min(100%, 42rem);
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 20%, var(--color-border-strong));
+    border-radius: var(--radius-lg);
+    background: var(--color-surface-strong);
+    box-shadow: var(--shadow-soft);
+  }
+
+  &__image-preview-close {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+    display: inline-grid;
+    place-items: center;
+    width: var(--button-height);
+    height: var(--button-height);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-secondary) 18%, var(--color-border-strong));
+    border-radius: var(--radius-pill);
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    box-shadow: var(--shadow-panel);
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring), var(--shadow-panel);
+    }
+  }
+
+  &__image-preview-image {
+    width: 100%;
+    max-height: min(72vh, 42rem);
+    border-radius: var(--radius-md);
+    object-fit: contain;
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  }
+
+  &__image-preview-title {
+    padding-inline: var(--space-1);
+    color: var(--color-text);
+    font-size: var(--text-md);
+    line-height: var(--line-tight);
   }
 
   @media (prefers-reduced-motion: reduce) {

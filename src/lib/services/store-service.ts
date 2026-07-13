@@ -12,6 +12,7 @@ import type {
   OrderStatus,
   Store,
   StoreBundle,
+  StoreFeedback,
   StoreTheme,
   Table,
 } from "@/types/menu";
@@ -40,6 +41,7 @@ export interface StoreSettingsPayload {
       | "description"
       | "phone"
       | "address"
+      | "googleReviewUrl"
       | "openingHours"
       | "isActive"
       | "isAcceptingOrders"
@@ -65,6 +67,12 @@ export interface StoreSettingsPayload {
       | "visualStyle"
     >
   >;
+}
+
+export interface FeedbackInput {
+  orderId: string;
+  rating: number;
+  comment?: string;
 }
 
 const removeUndefined = <T>(value: T): T => {
@@ -184,6 +192,11 @@ export const updateAdditional = async (
   const response = await callable(removeUndefined({ storeId, additionalId, ...additional }));
 
   return response.data as Additional;
+};
+
+export const reorderAdditionals = async (storeId: string, additionalIds: string[]) => {
+  const callable = httpsCallable(firebaseFunctions, "reorderAdditionals");
+  await callable({ storeId, additionalIds });
 };
 
 export const deleteAdditional = async (storeId: string, additionalId: string) => {
@@ -369,6 +382,26 @@ export const updateStoreSettings = async (storeId: string, payload: StoreSetting
   await callable(removeUndefined({ storeId, ...payload }));
 };
 
+export const submitOrderFeedback = async (payload: FeedbackInput) => {
+  const callable = httpsCallable(firebaseFunctions, "submitOrderFeedback");
+  const response = await callable(removeUndefined(payload));
+
+  return response.data as { ok: true; feedbackId: string; alreadySubmitted?: boolean };
+};
+
+export const subscribeStoreFeedbacks = (
+  storeId: string,
+  onChange: (feedbacks: StoreFeedback[]) => void,
+  onError?: (error: Error) => void,
+) =>
+  onSnapshot(
+    query(collection(firestore, "stores", storeId, "feedbacks"), orderBy("createdAt", "desc")),
+    (snapshot) => {
+      onChange(snapshot.docs.map((candidate) => ({ id: candidate.id, ...candidate.data() }) as StoreFeedback));
+    },
+    (error) => onError?.(error),
+  );
+
 export const subscribeStoreOrders = (
   storeId: string,
   onChange: (orders: Order[]) => void,
@@ -385,6 +418,13 @@ export const subscribeStoreOrders = (
 export const updateOrderStatus = async (storeId: string, orderId: string, status: OrderStatus) => {
   const callable = httpsCallable(firebaseFunctions, "updateOrderStatus");
   await callable({ storeId, orderId, status });
+};
+
+export const finalizeConfirmedOrders = async (storeId: string, orderIds: string[]) => {
+  const callable = httpsCallable(firebaseFunctions, "finalizeConfirmedOrders");
+  const response = await callable({ storeId, orderIds });
+
+  return response.data as { ok: true; updatedCount: number };
 };
 
 export const deleteOrder = async (storeId: string, orderId: string) => {

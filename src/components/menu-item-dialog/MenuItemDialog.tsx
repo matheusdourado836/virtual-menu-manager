@@ -11,8 +11,10 @@ interface MenuItemDialogProps {
   item: MenuItem;
   note: string;
   selectedOptionIds: string[];
+  isImagePreviewOpen?: boolean;
   onAdd: (quantity: number) => void;
   onClose: () => void;
+  onImagePreview?: () => void;
   onNoteChange: (note: string) => void;
   onToggleOption: (groupId: string, choiceId: string, maxSelected: number) => void;
 }
@@ -21,8 +23,10 @@ export function MenuItemDialog({
   item,
   note,
   selectedOptionIds,
+  isImagePreviewOpen = false,
   onAdd,
   onClose,
+  onImagePreview,
   onNoteChange,
   onToggleOption,
 }: MenuItemDialogProps) {
@@ -30,7 +34,7 @@ export function MenuItemDialog({
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isImagePreviewOpen) {
         onClose();
       }
     };
@@ -42,7 +46,7 @@ export function MenuItemDialog({
       document.body.classList.remove("menu-dialog-open");
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [onClose]);
+  }, [isImagePreviewOpen, onClose]);
 
   const unitTotal = useMemo(
     () =>
@@ -91,14 +95,22 @@ export function MenuItemDialog({
 
         <div className="menu-item-dialog__content">
           <div className="menu-item-dialog__summary">
-            <Image
-              className="menu-item-dialog__image"
-              src={item.imageUrl || "/placeholder-item.svg"}
-              alt=""
-              width={160}
-              height={120}
-              unoptimized
-            />
+            <button
+              className="menu-item-dialog__image-button"
+              type="button"
+              onClick={onImagePreview}
+              aria-label={`Ver foto de ${item.name}`}
+              title={`Ver foto de ${item.name}`}
+            >
+              <Image
+                className="menu-item-dialog__image"
+                src={item.imageUrl || "/placeholder-item.svg"}
+                alt=""
+                width={160}
+                height={120}
+                unoptimized
+              />
+            </button>
             <div className="menu-item-dialog__summary-copy">
               {item.description ? <p className="menu-item-dialog__description">{item.description}</p> : null}
               <strong className="menu-item-dialog__base-price">A partir de {formatCurrency(item.price)}</strong>

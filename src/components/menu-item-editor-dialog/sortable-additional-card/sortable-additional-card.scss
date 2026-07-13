@@ -1,0 +1,110 @@
+.sortable-additional-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: var(--border-thin) solid var(--admin-color-border);
+  border-radius: var(--radius-md);
+  color: var(--admin-color-text);
+  background: var(--admin-color-surface);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+
+  &--selected {
+    border-color: var(--admin-color-sidebar);
+    background: color-mix(
+      in srgb,
+      var(--admin-color-sidebar) var(--color-mix-subtle),
+      var(--admin-color-surface)
+    );
+    cursor: grab;
+    touch-action: manipulation;
+    user-select: none;
+  }
+
+  &--selected &__select {
+    cursor: inherit;
+  }
+
+  &--dragging {
+    z-index: var(--z-popover);
+    border-color: var(--admin-color-border-strong);
+    background: color-mix(
+      in srgb,
+      var(--admin-color-sidebar) var(--color-mix-emphasis),
+      var(--admin-color-surface)
+    );
+    box-shadow: var(--shadow-panel);
+    opacity: var(--opacity-dragging);
+    cursor: grabbing;
+  }
+
+  &--dragging &__select {
+    cursor: grabbing;
+  }
+
+  &--disabled {
+    opacity: var(--opacity-muted);
+  }
+
+  &__drag-indicator {
+    display: inline-grid;
+    place-items: center;
+    width: var(--space-9);
+    height: var(--space-9);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-sm);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface-muted);
+  }
+
+  &__drag-placeholder {
+    display: inline-block;
+    width: var(--space-9);
+    height: var(--space-9);
+  }
+
+  &__select {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-3);
+    cursor: pointer;
+  }
+
+  &__checkbox {
+    width: var(--space-5);
+    height: var(--space-5);
+    accent-color: var(--admin-color-sidebar);
+  }
+
+  &__copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__name {
+    overflow: hidden;
+    color: var(--admin-color-text);
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__price {
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-xs);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sortable-additional-card {
+    transition: none;
+  }
+}

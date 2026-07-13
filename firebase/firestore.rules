@@ -82,6 +82,11 @@ service cloud.firestore {
         allow update, delete: if isStoreAdmin(storeId);
       }
 
+      match /feedbacks/{feedbackId} {
+        allow read: if isStoreAdmin(storeId);
+        allow create, update, delete: if false;
+      }
+
       match /counters/{counterId} {
         allow read, write: if false;
       }

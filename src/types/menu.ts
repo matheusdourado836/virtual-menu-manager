@@ -26,6 +26,7 @@ export interface Store {
   description: string;
   phone?: string;
   address?: string;
+  googleReviewUrl?: string;
   openingHours?: string;
   logoUrl?: string;
   owners: string[];
@@ -168,6 +169,19 @@ export interface Order {
   deliveredAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+}
+
+export interface StoreFeedback {
+  id: string;
+  storeId: string;
+  orderId: string;
+  orderCode: string;
+  customerName: string;
+  tableLabel?: string;
+  rating: number;
+  comment?: string;
+  source: "internal";
+  createdAt: string;
 }
 
 export interface StoreBundle {

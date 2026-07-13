@@ -1,0 +1,128 @@
+@use "../../theme/scss/mixins" as *;
+
+.feedbacks-manager {
+  display: grid;
+  gap: var(--space-5);
+
+  &__summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-10) * 4), 1fr));
+    gap: var(--space-3);
+  }
+
+  &__metric,
+  &__highlight,
+  &__card {
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-admin);
+  }
+
+  &__metric {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-5);
+  }
+
+  &__metric-icon {
+    display: inline-grid;
+    place-items: center;
+    width: var(--admin-icon-size);
+    height: var(--admin-icon-size);
+    border-radius: var(--radius-pill);
+    color: var(--color-text);
+    background: var(--color-surface-muted);
+  }
+
+  &__metric-value {
+    color: var(--color-text);
+    font-size: clamp(var(--text-xl), 3vw, var(--text-2xl));
+    font-weight: 650;
+    line-height: var(--line-tight);
+  }
+
+  &__metric-label,
+  &__eyebrow,
+  &__meta {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+  }
+
+  &__metric-label,
+  &__eyebrow {
+    font-weight: 800;
+    letter-spacing: var(--border-thin);
+    text-transform: uppercase;
+  }
+
+  &__highlight {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-5);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 5%, transparent), transparent),
+      var(--color-surface);
+  }
+
+  &__highlight-title {
+    color: var(--color-text);
+    font-size: var(--text-lg);
+  }
+
+  &__highlight-text,
+  &__comment {
+    color: var(--color-text-muted);
+    line-height: var(--line-normal);
+  }
+
+  &__list {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  &__card {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  &__card-header {
+    display: grid;
+    gap: var(--space-3);
+
+    @include respond-to(tablet) {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+    }
+  }
+
+  &__card-heading {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__customer {
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: var(--text-md);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__rating {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-height: var(--space-8);
+    padding: 0 var(--space-3);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-pill);
+    color: var(--color-text);
+    background: var(--color-surface-muted);
+    font-size: var(--text-sm);
+    font-weight: 800;
+  }
+}

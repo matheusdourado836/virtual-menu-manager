@@ -30,6 +30,7 @@ interface StoreSettingsForm {
   description: string;
   phone: string;
   address: string;
+  googleReviewUrl: string;
   pausedMessage: string;
   isActive: boolean;
   isAcceptingOrders: boolean;
@@ -254,6 +255,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
     description: store.description,
     phone: formatPhoneInput(store.phone || ""),
     address: store.address || "",
+    googleReviewUrl: store.googleReviewUrl || "",
     pausedMessage: store.pausedMessage,
     isActive: store.isActive,
     isAcceptingOrders: store.isAcceptingOrders,
@@ -469,6 +471,11 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
       return;
     }
 
+    if (form.googleReviewUrl.trim() && !/^https:\/\/.+/u.test(form.googleReviewUrl.trim())) {
+      setError("Informe uma URL HTTPS válida para avaliações do Google.");
+      return;
+    }
+
     if (hasInvalidOpeningHours) {
       setError("Revise os horários: a abertura precisa ser antes do fechamento.");
       return;
@@ -489,6 +496,7 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
           description: form.description.trim(),
           phone: form.phone.trim(),
           address: form.address.trim(),
+          googleReviewUrl: form.googleReviewUrl.trim(),
           openingHours: serializeOpeningHours(openingDays),
           pausedMessage: form.pausedMessage.trim(),
           isActive: form.isActive,
@@ -583,6 +591,18 @@ export function StoreSettings({ store, theme, categories, menuItems, onSaved, on
               />
             </label>
           </div>
+
+          <label className="store-settings__field">
+            <span className="store-settings__label">Link de avaliação no Google</span>
+            <input
+              className="store-settings__control"
+              value={form.googleReviewUrl}
+              onChange={(event) => updateField("googleReviewUrl", event.target.value)}
+              type="url"
+              inputMode="url"
+              placeholder="https://g.page/r/..."
+            />
+          </label>
         </div>
 
         <div className="store-settings__section">

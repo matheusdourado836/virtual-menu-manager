@@ -1,0 +1,112 @@
+@use "../../../theme/scss/mixins" as *;
+
+.sortable-additional-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+
+  @include respond-to(tablet) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  &--disabled {
+    opacity: var(--opacity-muted);
+  }
+
+  &--dragging {
+    z-index: var(--z-popover);
+    border-color: var(--admin-color-border-strong);
+    background: color-mix(
+      in srgb,
+      var(--admin-color-sidebar) var(--color-mix-emphasis),
+      var(--color-background)
+    );
+    box-shadow: var(--shadow-panel);
+    opacity: var(--opacity-dragging);
+  }
+
+  &__handle,
+  &__action {
+    display: inline-grid;
+    place-items: center;
+    width: var(--button-height);
+    height: var(--button-height);
+    border: var(--border-thin) solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: var(--opacity-muted);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__handle {
+    cursor: grab;
+    touch-action: none;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  &__copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__name {
+    overflow: hidden;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__price {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  &__buttons {
+    grid-column: 2;
+    display: inline-flex;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    gap: var(--space-2);
+
+    @include respond-to(tablet) {
+      grid-column: auto;
+      justify-content: flex-end;
+    }
+  }
+
+  &__action {
+    &--danger {
+      color: var(--color-danger);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sortable-additional-row {
+    transition: none;
+  }
+}

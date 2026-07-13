@@ -178,6 +178,21 @@ const updateStatusSchema = z.object({
   status: orderStatusSchema,
 });
 
+const finalizeConfirmedOrdersSchema = z
+  .object({
+    storeId: z.string().min(1),
+    orderIds: z.array(z.string().trim().min(1)).min(1).max(500),
+  })
+  .superRefine((payload, context) => {
+    if (new Set(payload.orderIds).size !== payload.orderIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["orderIds"],
+        message: "A lista de pedidos não pode conter ids duplicados.",
+      });
+    }
+  });
+
 const deleteOrderSchema = z.object({
   storeId: z.string().min(1),
   orderId: z.string().min(1),
@@ -258,6 +273,21 @@ const updateAdditionalSchema = additionalFieldsSchema.extend({
   additionalId: z.string().min(1),
 });
 
+const reorderAdditionalsSchema = z
+  .object({
+    storeId: z.string().min(1),
+    additionalIds: z.array(z.string().trim().min(1)).min(1).max(500),
+  })
+  .superRefine((payload, context) => {
+    if (new Set(payload.additionalIds).size !== payload.additionalIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["additionalIds"],
+        message: "A lista de adicionais não pode conter ids duplicados.",
+      });
+    }
+  });
+
 const deleteAdditionalSchema = z.object({
   storeId: z.string().min(1),
   additionalId: z.string().min(1),
@@ -271,6 +301,10 @@ const updateStoreSettingsSchema = z.object({
       description: z.string().trim().max(500).optional(),
       phone: optionalTrimmedValue(80),
       address: optionalTrimmedValue(240),
+      googleReviewUrl: optionalTrimmedValue(500).refine(
+        (value) => !value || /^https:\/\/.+/u.test(value),
+        "Informe uma URL HTTPS para avaliações do Google.",
+      ),
       openingHours: optionalTrimmedValue(240),
       isActive: z.boolean().optional(),
       isAcceptingOrders: z.boolean().optional(),
@@ -301,6 +335,12 @@ const generateQrSchema = z.object({
   storeId: z.string().min(1),
   tableId: z.string().min(1),
   publicBaseUrl: z.string().url(),
+});
+
+const submitOrderFeedbackSchema = z.object({
+  orderId: z.string().trim().min(1),
+  rating: z.number().int().min(1).max(5),
+  comment: optionalTrimmedValue(500),
 });
 
 const assertPlatformAdmin = (auth: { token?: admin.auth.DecodedIdToken } | undefined) => {
@@ -578,6 +618,43 @@ export const updateOrderStatus = onCall(async (request) => {
   return { ok: true };
 });
 
+export const finalizeConfirmedOrders = onCall(async (request) => {
+  const payload = finalizeConfirmedOrdersSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const now = new Date().toISOString();
+  const finalizableStatuses = new Set(["accepted", "preparing", "ready"]);
+  const orderRefs = payload.orderIds.map((orderId) => db.doc(`stores/${payload.storeId}/orders/${orderId}`));
+  const orderSnapshots = await db.getAll(...orderRefs);
+  const batch = db.batch();
+  let updatedCount = 0;
+
+  orderSnapshots.forEach((orderSnapshot) => {
+    const status = orderSnapshot.data()?.status;
+
+    if (!orderSnapshot.exists || !finalizableStatuses.has(status)) {
+      return;
+    }
+
+    updatedCount += 1;
+    batch.set(
+      orderSnapshot.ref,
+      {
+        status: "delivered",
+        updatedAt: now,
+        deliveredAt: now,
+      },
+      { merge: true },
+    );
+  });
+
+  if (updatedCount > 0) {
+    await batch.commit();
+  }
+
+  return { ok: true, updatedCount };
+});
+
 export const deleteOrder = onCall(async (request) => {
   const payload = deleteOrderSchema.parse(request.data);
   await assertStoreAdmin(payload.storeId, request.auth);
@@ -759,6 +836,47 @@ export const updateAdditional = onCall(async (request) => {
   return additional;
 });
 
+export const reorderAdditionals = onCall(async (request) => {
+  const payload = reorderAdditionalsSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const now = new Date().toISOString();
+  const collectionRef = db.collection(`stores/${payload.storeId}/additionals`);
+  const snapshot = await collectionRef.get();
+  const additionalById = new Map(snapshot.docs.map((document) => [document.id, document]));
+  const unknownAdditionalId = payload.additionalIds.find((additionalId) => !additionalById.has(additionalId));
+
+  if (unknownAdditionalId) {
+    throw new HttpsError("not-found", `Adicional ${unknownAdditionalId} não encontrado.`);
+  }
+
+  const requestedIds = new Set(payload.additionalIds);
+  const remainingIds = snapshot.docs
+    .filter((document) => !requestedIds.has(document.id))
+    .sort((first, second) => {
+      const firstOrder = Number(first.data().order || 0);
+      const secondOrder = Number(second.data().order || 0);
+      return firstOrder - secondOrder || String(first.data().name || "").localeCompare(String(second.data().name || ""));
+    })
+    .map((document) => document.id);
+  const orderedIds = [...payload.additionalIds, ...remainingIds];
+  const batch = db.batch();
+
+  orderedIds.forEach((additionalId, index) => {
+    const additionalDocument = additionalById.get(additionalId);
+
+    if (additionalDocument) {
+      batch.update(additionalDocument.ref, {
+        order: index + 1,
+        updatedAt: now,
+      });
+    }
+  });
+
+  await batch.commit();
+  return { ok: true };
+});
+
 export const deleteAdditional = onCall(async (request) => {
   const payload = deleteAdditionalSchema.parse(request.data);
   await assertStoreAdmin(payload.storeId, request.auth);
@@ -848,6 +966,65 @@ export const deleteMenuItem = onCall(async (request) => {
 
   await db.doc(`stores/${payload.storeId}/menuItems/${payload.itemId}`).delete();
   return { ok: true };
+});
+
+export const submitOrderFeedback = onCall(async (request) => {
+  const payload = submitOrderFeedbackSchema.parse(request.data);
+  const lookupSnapshot = await db.doc(`orderLookup/${payload.orderId}`).get();
+  const lookup = lookupSnapshot.data() as { storeId?: string; orderId?: string } | undefined;
+
+  if (!lookup?.storeId || !lookup.orderId) {
+    throw new HttpsError("not-found", "Pedido não encontrado para avaliação.");
+  }
+
+  const orderRef = db.doc(`stores/${lookup.storeId}/orders/${lookup.orderId}`);
+  const feedbackRef = db.doc(`stores/${lookup.storeId}/feedbacks/${lookup.orderId}`);
+  const now = new Date().toISOString();
+
+  const result = await db.runTransaction(async (transaction) => {
+    const [orderSnapshot, feedbackSnapshot] = await Promise.all([
+      transaction.get(orderRef),
+      transaction.get(feedbackRef),
+    ]);
+
+    if (feedbackSnapshot.exists) {
+      return { ok: true as const, feedbackId: feedbackRef.id, alreadySubmitted: true };
+    }
+
+    const order = orderSnapshot.data() as
+      | {
+          code?: string;
+          customerName?: string;
+          tableLabel?: string;
+          status?: string;
+        }
+      | undefined;
+
+    if (!orderSnapshot.exists || !order) {
+      throw new HttpsError("not-found", "Pedido não encontrado para avaliação.");
+    }
+
+    if (order.status !== "delivered") {
+      throw new HttpsError("failed-precondition", "A avaliação só fica disponível após a finalização do pedido.");
+    }
+
+    transaction.set(feedbackRef, removeUndefined({
+      id: feedbackRef.id,
+      storeId: lookup.storeId,
+      orderId: lookup.orderId,
+      orderCode: order.code || "",
+      customerName: order.customerName || "",
+      tableLabel: order.tableLabel,
+      rating: payload.rating,
+      comment: payload.comment || undefined,
+      source: "internal",
+      createdAt: now,
+    }));
+
+    return { ok: true as const, feedbackId: feedbackRef.id };
+  });
+
+  return result;
 });
 
 export const updateStoreSettings = onCall(async (request) => {

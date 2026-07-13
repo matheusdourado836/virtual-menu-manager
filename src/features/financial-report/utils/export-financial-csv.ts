@@ -17,6 +17,18 @@ const escapeCsv = (value: string | number) => `"${String(value).replace(/"/g, '"
 const summarizeItems = (order: Order) =>
   order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ");
 
+const summarizeAdditionals = (order: Order) =>
+  order.items
+    .flatMap((item) => item.selectedOptions.map((option) => `${item.quantity}x ${option.choiceName}`))
+    .join(", ");
+
+const getAdditionalsTotal = (order: Order) =>
+  order.items.reduce(
+    (total, item) =>
+      total + item.selectedOptions.reduce((optionTotal, option) => optionTotal + Number(option.price || 0), 0) * item.quantity,
+    0,
+  );
+
 export const downloadFinancialCsv = (orders: Order[], filename: string) => {
   const header = [
     "Código do pedido",
@@ -27,6 +39,8 @@ export const downloadFinancialCsv = (orders: Order[], filename: string) => {
     "Forma de pagamento",
     "Status do pagamento",
     "Itens",
+    "Adicionais",
+    "Total em adicionais",
     "Subtotal",
     "Taxa de serviço",
     "Total",
@@ -42,6 +56,8 @@ export const downloadFinancialCsv = (orders: Order[], filename: string) => {
     getPaymentMethodLabel(order.paymentMethod),
     getPaymentStatusLabel(order.paymentStatus),
     summarizeItems(order),
+    summarizeAdditionals(order),
+    formatCurrency(getAdditionalsTotal(order)),
     formatCurrency(Number(order.subtotal)),
     formatCurrency(Number(order.serviceFee)),
     formatCurrency(Number(order.total)),

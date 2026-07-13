@@ -3,6 +3,7 @@
 import {
   Bell,
   Check,
+  CheckCheck,
   ChefHat,
   CircleDot,
   Eye,
@@ -18,7 +19,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { OrderDetailsDialog } from "@/components/order-details-dialog/OrderDetailsDialog";
 import { StatusPill } from "@/components/ui/status-pill/StatusPill";
-import { deleteOrder, updateOrderStatus } from "@/lib/services/store-service";
+import { deleteOrder, finalizeConfirmedOrders, updateOrderStatus } from "@/lib/services/store-service";
 import { formatDateTime } from "@/lib/utils/dates";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatCurrency } from "@/lib/utils/money";
@@ -62,14 +63,18 @@ interface OrdersBoardProps {
   storeId: string;
   orders: Order[];
   activeGroup?: OrderGroup;
+  canFinalizeConfirmed?: boolean;
   onActiveGroupChange?: (group: OrderGroup) => void;
   onFeedback: (message: string, variant?: "success" | "error" | "info") => void;
 }
+
+const bulkFinalizableStatuses: OrderStatus[] = ["accepted", "preparing", "ready"];
 
 export function OrdersBoard({
   storeId,
   orders,
   activeGroup,
+  canFinalizeConfirmed = false,
   onActiveGroupChange,
   onFeedback,
 }: OrdersBoardProps) {
@@ -82,6 +87,8 @@ export function OrdersBoard({
   } | null>(null);
   const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null);
+  const [isConfirmingBulkFinalize, setIsConfirmingBulkFinalize] = useState(false);
+  const [isFinalizingConfirmed, setIsFinalizingConfirmed] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [openActionsOrderId, setOpenActionsOrderId] = useState("");
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +99,12 @@ export function OrdersBoard({
     [orders, selectedOrderId],
   );
   const selectedGroup = activeGroup ?? internalActiveGroup;
+  const confirmedOrdersToFinalize = useMemo(
+    () => orders.filter((order) => bulkFinalizableStatuses.includes(order.status)),
+    [orders],
+  );
+  const isOrderActionPending =
+    Boolean(pendingAction) || Boolean(deletingOrderId) || isFinalizingConfirmed;
 
   useEffect(() => {
     filterButtonRefs.current[selectedGroup]?.scrollIntoView({
@@ -214,6 +227,42 @@ export function OrdersBoard({
     }
   };
 
+  const confirmFinalizeConfirmedOrders = async () => {
+    const orderIds = confirmedOrdersToFinalize.map((order) => order.id);
+
+    if (!orderIds.length) {
+      setIsConfirmingBulkFinalize(false);
+      onFeedback("Não há pedidos confirmados para finalizar.", "info");
+      return;
+    }
+
+    setIsFinalizingConfirmed(true);
+
+    try {
+      const result = await finalizeConfirmedOrders(storeId, orderIds);
+
+      if (result.updatedCount > 0) {
+        playUiSound(UI_SOUNDS.orderComplete);
+      }
+
+      setIsConfirmingBulkFinalize(false);
+      onFeedback(
+        result.updatedCount === 1
+          ? "1 pedido confirmado foi finalizado."
+          : `${result.updatedCount} pedidos confirmados foram finalizados.`,
+      );
+    } catch (error) {
+      onFeedback(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível finalizar os pedidos confirmados.",
+        "error",
+      );
+    } finally {
+      setIsFinalizingConfirmed(false);
+    }
+  };
+
   const selectGroup = (group: OrderGroup) => {
     if (activeGroup === undefined) {
       setInternalActiveGroup(group);
@@ -231,7 +280,6 @@ export function OrdersBoard({
   ) => {
     const isPending =
       pendingAction?.orderId === order.id && pendingAction.action === action;
-    const isDisabled = Boolean(pendingAction) || Boolean(deletingOrderId);
 
     return (
       <button
@@ -239,7 +287,7 @@ export function OrdersBoard({
         className="orders-board__action orders-board__action--primary"
         type="button"
         onClick={onClick}
-        disabled={isDisabled}
+        disabled={isOrderActionPending}
       >
         {isPending ? (
           <Loader2 className="orders-board__spinner" size={15} aria-hidden />
@@ -332,6 +380,30 @@ export function OrdersBoard({
         </div>
 
         <div className="orders-board__toolbar-actions">
+          {canFinalizeConfirmed ? (
+            <button
+              className="orders-board__bulk-action"
+              type="button"
+              onClick={() => setIsConfirmingBulkFinalize(true)}
+              disabled={isOrderActionPending || !confirmedOrdersToFinalize.length}
+              title={
+                confirmedOrdersToFinalize.length
+                  ? "Finalizar todos os pedidos aceitos, em preparo ou prontos"
+                  : "Não há pedidos confirmados para finalizar"
+              }
+            >
+              {isFinalizingConfirmed ? (
+                <Loader2 className="orders-board__spinner" size={17} aria-hidden />
+              ) : (
+                <CheckCheck size={17} aria-hidden />
+              )}
+              {isFinalizingConfirmed ? "Finalizando" : "Finalizar confirmados"}
+              {confirmedOrdersToFinalize.length ? (
+                <span className="orders-board__bulk-count">{confirmedOrdersToFinalize.length}</span>
+              ) : null}
+            </button>
+          ) : null}
+
           <label className="orders-board__search">
             <Search size={18} aria-hidden />
             <input
@@ -460,7 +532,7 @@ export function OrdersBoard({
                         aria-label={`Mais ações do pedido ${order.code}`}
                         className="orders-board__more-trigger"
                         disabled={
-                          Boolean(pendingAction) || Boolean(deletingOrderId)
+                          isOrderActionPending
                         }
                         onClick={() =>
                           setOpenActionsOrderId((currentOrderId) =>
@@ -582,6 +654,26 @@ export function OrdersBoard({
             }
           }}
           onConfirm={confirmCancelOrder}
+        />
+      ) : null}
+
+      {isConfirmingBulkFinalize ? (
+        <ConfirmDialog
+          title="Finalizar pedidos confirmados?"
+          description={`${
+            confirmedOrdersToFinalize.length === 1
+              ? "1 pedido aceito, em preparo ou pronto será finalizado."
+              : `${confirmedOrdersToFinalize.length} pedidos aceitos, em preparo ou prontos serão finalizados.`
+          } Pedidos ainda aguardando confirmação não serão alterados.`}
+          confirmLabel="Finalizar pedidos"
+          loadingLabel="Finalizando"
+          isLoading={isFinalizingConfirmed}
+          onCancel={() => {
+            if (!isFinalizingConfirmed) {
+              setIsConfirmingBulkFinalize(false);
+            }
+          }}
+          onConfirm={confirmFinalizeConfirmedOrders}
         />
       ) : null}
     </section>

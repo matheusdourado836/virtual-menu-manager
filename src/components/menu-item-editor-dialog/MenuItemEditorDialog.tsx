@@ -1,8 +1,12 @@
 "use client";
 
+import { arrayMove } from "@dnd-kit/helpers";
+import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortable } from "@dnd-kit/react/sortable";
 import { ImagePlus, Loader2, Plus, Save, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { SortableAdditionalCard } from "@/components/menu-item-editor-dialog/sortable-additional-card/SortableAdditionalCard";
 import { deleteUploadedImage, uploadMenuItemImage, type MenuItemInput } from "@/lib/services/store-service";
 import { formatPriceInput, getPriceDigits, parsePrice, sanitizePriceDigits } from "@/lib/utils/input-format";
 import type { Additional, Category, MenuItem, OptionGroup } from "@/types/menu";
@@ -22,6 +26,9 @@ interface MenuItemEditorDialogProps {
 const createCategoryOptionValue = "__create_category__";
 const maxSourceImageSizeInBytes = 15 * 1024 * 1024;
 const defaultAdditionalGroupId = "adicionais";
+
+const getInitialSelectedAdditionalIds = (item?: MenuItem) =>
+  Array.from(new Set(item?.optionsGroups.flatMap((group) => group.choices.map((choice) => choice.id)) || []));
 
 export function MenuItemEditorDialog({
   storeId,
@@ -45,9 +52,8 @@ export function MenuItemEditorDialog({
   const [hasAdditionals, setHasAdditionals] = useState(
     item ? item.optionsGroups.some((group) => group.choices.length > 0) : false,
   );
-  const [selectedAdditionalIds, setSelectedAdditionalIds] = useState(
-    item?.optionsGroups.flatMap((group) => group.choices.map((choice) => choice.id)) || [],
-  );
+  const [selectedAdditionalIds, setSelectedAdditionalIds] = useState(getInitialSelectedAdditionalIds(item));
+  const [hasCustomAdditionalOrder, setHasCustomAdditionalOrder] = useState(Boolean(item));
   const [createdCategories, setCreatedCategories] = useState<Category[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCategoryCreatorOpen, setIsCategoryCreatorOpen] = useState(false);
@@ -58,21 +64,32 @@ export function MenuItemEditorDialog({
   const [categoryError, setCategoryError] = useState("");
   const isBusy = isSaving || isUploadingImage || isCreatingCategory;
   const displayedImageUrl = isImageRemoved ? "" : imagePreviewUrl || currentImageUrl;
-
   const availableCategories = [
     ...categories,
     ...createdCategories.filter((category) => !categories.some((current) => current.id === category.id)),
   ];
   const additionalGroupId =
     item?.optionsGroups.find((group) => group.choices.length > 0)?.id || defaultAdditionalGroupId;
+  const additionalById = useMemo(
+    () => new Map(additionals.map((additional) => [additional.id, additional])),
+    [additionals],
+  );
+  const selectedAdditionals = selectedAdditionalIds
+    .map((additionalId) => additionalById.get(additionalId))
+    .filter((additional): additional is Additional => Boolean(additional));
+  const displayedAdditionals = [
+    ...selectedAdditionals,
+    ...additionals.filter((additional) => !selectedAdditionalIds.includes(additional.id)),
+  ];
 
   const buildOptionsGroups = (): OptionGroup[] => {
     if (!hasAdditionals) {
       return [];
     }
 
-    const choices = additionals
-      .filter((additional) => selectedAdditionalIds.includes(additional.id))
+    const choices = selectedAdditionalIds
+      .map((additionalId) => additionalById.get(additionalId))
+      .filter((additional): additional is Additional => Boolean(additional))
       .map((additional) => ({
         id: additional.id,
         name: additional.name,
@@ -94,6 +111,11 @@ export function MenuItemEditorDialog({
         isRequired: false,
       },
     ];
+  };
+
+  const sortAdditionalIdsByGlobalOrder = (additionalIds: string[]) => {
+    const selectedIds = new Set(additionalIds);
+    return additionals.filter((additional) => selectedIds.has(additional.id)).map((additional) => additional.id);
   };
 
   useEffect(() => {
@@ -251,12 +273,35 @@ export function MenuItemEditorDialog({
   };
 
   const toggleAdditional = (additionalId: string) => {
-    setSelectedAdditionalIds((current) =>
-      current.includes(additionalId)
+    setSelectedAdditionalIds((current) => {
+      const next = current.includes(additionalId)
         ? current.filter((currentAdditionalId) => currentAdditionalId !== additionalId)
-        : [...current, additionalId],
-    );
+        : [...current, additionalId];
+
+      return hasCustomAdditionalOrder ? next : sortAdditionalIdsByGlobalOrder(next);
+    });
     setError("");
+  };
+
+  const finishAdditionalDrag = (event: DragEndEvent) => {
+    if (event.canceled) {
+      return;
+    }
+
+    const { source } = event.operation;
+
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return;
+    }
+
+    setHasCustomAdditionalOrder(true);
+    setSelectedAdditionalIds((current) => {
+      if (source.initialIndex < 0 || source.index < 0 || source.index >= current.length) {
+        return current;
+      }
+
+      return arrayMove(current, source.initialIndex, source.index);
+    });
   };
 
   return (
@@ -405,7 +450,7 @@ export function MenuItemEditorDialog({
               <div>
                 <span className="menu-item-editor-dialog__label">Adicionais</span>
                 <p className="menu-item-editor-dialog__hint">
-                  Escolha quais adicionais estarão disponíveis para este item.
+                  Escolha os adicionais disponíveis. Arraste os marcados para definir a ordem no cardápio público.
                 </p>
               </div>
               <label className="menu-item-editor-dialog__toggle">
@@ -428,33 +473,21 @@ export function MenuItemEditorDialog({
 
             {hasAdditionals ? (
               additionals.length ? (
-                <div className="menu-item-editor-dialog__addons-list">
-                  {additionals.map((additional) => {
-                    const isSelected = selectedAdditionalIds.includes(additional.id);
-
-                    return (
-                      <label
-                        className={`menu-item-editor-dialog__addon${
-                          isSelected ? " menu-item-editor-dialog__addon--selected" : ""
-                        }${additional.isAvailable ? "" : " menu-item-editor-dialog__addon--disabled"}`}
+                <DragDropProvider onDragEnd={finishAdditionalDrag}>
+                  <div className="menu-item-editor-dialog__addons-list">
+                    {displayedAdditionals.map((additional, index) => (
+                      <SortableAdditionalCard
+                        additional={additional}
+                        index={index}
+                        isSelected={selectedAdditionalIds.includes(additional.id)}
+                        isBusy={isBusy}
+                        selectedCount={selectedAdditionals.length}
+                        onToggle={toggleAdditional}
                         key={additional.id}
-                      >
-                        <input
-                          className="menu-item-editor-dialog__addon-checkbox"
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleAdditional(additional.id)}
-                        />
-                        <span className="menu-item-editor-dialog__addon-copy">
-                          <strong className="menu-item-editor-dialog__addon-name">{additional.name}</strong>
-                          <small className="menu-item-editor-dialog__addon-price">
-                            {formatPriceInput(getPriceDigits(additional.price))}
-                          </small>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
+                      />
+                    ))}
+                  </div>
+                </DragDropProvider>
               ) : (
                 <p className="menu-item-editor-dialog__hint">
                   Cadastre adicionais na tela de Cardápio para poder vinculá-los ao item.

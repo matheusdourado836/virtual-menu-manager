@@ -128,6 +128,26 @@
     box-shadow: 0 0 0 var(--border-thin) var(--color-border-strong);
   }
 
+  &__image-button {
+    width: var(--menu-dialog-image-size);
+    height: var(--menu-dialog-image-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: zoom-in;
+    transition: transform var(--duration-fast) var(--ease-standard);
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
   &__description {
     line-height: var(--line-normal);
   }

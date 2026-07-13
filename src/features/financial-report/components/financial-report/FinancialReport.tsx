@@ -155,6 +155,18 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
       icon: ShoppingBag,
     },
     {
+      label: "Receita em adicionais",
+      value: formatCurrency(report.summary.additionalRevenue),
+      helper: "Extras nos pedidos finalizados",
+      icon: CircleDollarSign,
+    },
+    {
+      label: "Adicionais vendidos",
+      value: String(report.summary.soldAdditionals),
+      helper: `${report.summary.ordersWithAdditionals} pedidos com adicionais`,
+      icon: ShoppingBag,
+    },
+    {
       label: "Pedidos cancelados",
       value: String(report.summary.cancelledOrders),
       helper: "Status cancelado",
@@ -169,6 +181,12 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
     {
       label: "Produto mais vendido",
       value: report.summary.topProductName,
+      helper: "Por quantidade",
+      icon: PackageCheck,
+    },
+    {
+      label: "Adicional mais usado",
+      value: report.summary.topAdditionalName,
       helper: "Por quantidade",
       icon: PackageCheck,
     },
@@ -405,6 +423,35 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
                 ))
               ) : (
                 <p className="financial-report__empty-text">Nenhum produto vendido neste período.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="financial-report__panel">
+            <div className="financial-report__panel-heading">
+              <h2 className="financial-report__panel-title">Adicionais mais usados</h2>
+              <span className="financial-report__panel-subtitle">
+                {formatCurrency(report.summary.additionalRevenue)} em adicionais
+              </span>
+            </div>
+            <div className="financial-report__rows">
+              {report.topAdditionals.length ? (
+                report.topAdditionals.slice(0, 8).map((additional) => (
+                  <div className="financial-report__row" key={additional.choiceId}>
+                    <strong className="financial-report__row-title">{additional.name}</strong>
+                    <span className="financial-report__row-value" data-label="Quantidade">
+                      {additional.quantity} vendidos
+                    </span>
+                    <span className="financial-report__row-value" data-label="Total">
+                      {formatCurrency(additional.total)}
+                    </span>
+                    <span className="financial-report__row-value" data-label="Participação">
+                      {formatPercent(additional.percentage)}%
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="financial-report__empty-text">Nenhum adicional vendido neste período.</p>
               )}
             </div>
           </section>

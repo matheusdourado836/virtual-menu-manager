@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  MessageSquareText,
   Palette,
   Plus,
   QrCode,
@@ -23,6 +24,7 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
+import { FeedbacksManager } from "@/components/feedbacks-manager/FeedbacksManager";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
 import { OrdersBoard, type OrderGroup } from "@/components/orders-board/OrdersBoard";
 import { StoreSettings } from "@/components/store-settings/StoreSettings";
@@ -41,7 +43,7 @@ import { formatCurrency } from "@/lib/utils/money";
 import type { Order, StoreBundle, StoreTheme } from "@/types/menu";
 import "./admin-shell.scss";
 
-type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "settings";
+type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "feedbacks" | "settings";
 type DashboardMetricTarget = OrderGroup | "finance";
 
 interface DashboardMetric {
@@ -62,6 +64,7 @@ const adminTabs: Array<{
   { id: "tables", label: "Mesas", icon: QrCode },
   { id: "menu", label: "Cardápio", icon: Utensils },
   { id: "finance", label: "Financeiro", icon: CircleDollarSign },
+  { id: "feedbacks", label: "Feedbacks", icon: MessageSquareText },
   { id: "settings", label: "Configurações", icon: Palette },
 ];
 
@@ -71,6 +74,7 @@ const tabDescriptions: Record<AdminTab, string> = {
   tables: "Organize os pontos de atendimento e QR Codes.",
   menu: "Gerencie categorias, itens e disponibilidade.",
   finance: "Veja faturamento, produtos vendidos e pagamentos.",
+  feedbacks: "Acompanhe avaliações internas dos clientes.",
   settings: "Edite dados da loja, operação e identidade visual.",
 };
 
@@ -594,6 +598,7 @@ export function AdminShell({ slug }: AdminShellProps) {
                   orders={todayOrders}
                   storeId={bundle.store.id}
                   activeGroup={ordersBoardGroup}
+                  canFinalizeConfirmed
                   onActiveGroupChange={setOrdersBoardGroup}
                   onFeedback={showFeedback}
                 />
@@ -628,6 +633,9 @@ export function AdminShell({ slug }: AdminShellProps) {
             ) : null}
             {activeTab === "finance" ? (
               <FinancialReport storeId={bundle.store.id} tables={bundle.tables} />
+            ) : null}
+            {activeTab === "feedbacks" ? (
+              <FeedbacksManager storeId={bundle.store.id} onFeedback={showFeedback} />
             ) : null}
             {activeTab === "settings" ? (
               <StoreSettings

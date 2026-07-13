@@ -395,56 +395,6 @@
     }
   }
 
-  &__addon {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3);
-    border: var(--border-thin) solid var(--admin-color-border);
-    border-radius: var(--radius-md);
-    color: var(--admin-color-text);
-    background: var(--admin-color-surface);
-    transition:
-      border-color var(--duration-fast) var(--ease-standard),
-      background var(--duration-fast) var(--ease-standard);
-
-    &--selected {
-      border-color: var(--admin-color-sidebar);
-      background: color-mix(in srgb, var(--admin-color-sidebar) 6%, var(--admin-color-surface));
-    }
-
-    &--disabled {
-      opacity: 0.56;
-    }
-  }
-
-  &__addon-checkbox {
-    width: var(--space-5);
-    height: var(--space-5);
-    accent-color: var(--admin-color-sidebar);
-  }
-
-  &__addon-copy {
-    min-width: 0;
-    display: grid;
-    gap: var(--space-1);
-  }
-
-  &__addon-name {
-    overflow: hidden;
-    color: var(--admin-color-text);
-    font-size: var(--text-sm);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__addon-price {
-    color: var(--admin-color-text-muted);
-    font-size: var(--text-xs);
-  }
-
   &__footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -581,7 +531,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .menu-item-editor-dialog {
-    &__addon,
     &__switch-control::after,
     &__toggle-control::after,
     &__upload-box,
