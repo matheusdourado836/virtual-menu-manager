@@ -4,6 +4,7 @@ import { MessageSquareText, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
+import { getFriendlyErrorMessage } from "@/lib/errors/friendly-error";
 import { subscribeStoreFeedbacks } from "@/lib/services/store-service";
 import type { StoreFeedback } from "@/types/menu";
 import "./feedbacks-manager.scss";
@@ -36,7 +37,7 @@ export function FeedbacksManager({ storeId, onFeedback }: FeedbacksManagerProps)
         setIsLoading(false);
       },
       (error) => {
-        onFeedbackRef.current(error.message || "Não foi possível carregar os feedbacks.", "error");
+        onFeedbackRef.current(getFriendlyErrorMessage(error, "Não foi possível carregar os feedbacks."), "error");
         setIsLoading(false);
       },
     );
@@ -60,8 +61,8 @@ export function FeedbacksManager({ storeId, onFeedback }: FeedbacksManagerProps)
     <section className="feedbacks-manager">
       <div className="feedbacks-manager__summary" aria-label="Resumo dos feedbacks">
         <article className="feedbacks-manager__metric">
-          <span className="feedbacks-manager__metric-icon">
-            <Star size={20} aria-hidden />
+          <span className="feedbacks-manager__metric-icon feedbacks-manager__metric-icon--rating">
+            <Star fill="currentColor" size={20} aria-hidden />
           </span>
           <strong className="feedbacks-manager__metric-value">
             {averageRating ? averageRating.toFixed(1).replace(".", ",") : "0,0"}
@@ -111,7 +112,7 @@ export function FeedbacksManager({ storeId, onFeedback }: FeedbacksManagerProps)
                   </span>
                 </div>
                 <span className="feedbacks-manager__rating">
-                  <Star size={16} aria-hidden />
+                  <Star className="feedbacks-manager__rating-star" fill="currentColor" size={16} aria-hidden />
                   {feedback.rating}/5
                 </span>
               </header>
@@ -125,7 +126,7 @@ export function FeedbacksManager({ storeId, onFeedback }: FeedbacksManagerProps)
         <EmptyState
           icon={<MessageSquareText size={28} aria-hidden />}
           title="Sem feedbacks ainda"
-          text="As avaliações internas dos clientes vão aparecer aqui quando a loja não usar link do Google."
+          text="As avaliações que os clientes deixam ao final do pedido aparecerão aqui."
         />
       )}
     </section>

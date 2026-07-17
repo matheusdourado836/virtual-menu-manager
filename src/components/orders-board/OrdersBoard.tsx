@@ -70,6 +70,38 @@ interface OrdersBoardProps {
 
 const bulkFinalizableStatuses: OrderStatus[] = ["accepted", "preparing", "ready"];
 
+const statusActionByCurrentStatus: Partial<
+  Record<
+    OrderStatus,
+    {
+      nextStatus: OrderStatus;
+      label: string;
+      icon: ReactNode;
+    }
+  >
+> = {
+  received: {
+    nextStatus: "accepted",
+    label: "Aceitar",
+    icon: <Check size={16} aria-hidden />,
+  },
+  accepted: {
+    nextStatus: "preparing",
+    label: "Iniciar preparo",
+    icon: <ChefHat size={16} aria-hidden />,
+  },
+  preparing: {
+    nextStatus: "ready",
+    label: "Marcar pronto",
+    icon: <Bell size={16} aria-hidden />,
+  },
+  ready: {
+    nextStatus: "delivered",
+    label: "Finalizar",
+    icon: <Check size={16} aria-hidden />,
+  },
+};
+
 export function OrdersBoard({
   storeId,
   orders,
@@ -304,48 +336,40 @@ export function OrdersBoard({
     !target.closest("button, a, input, textarea, select, label");
 
   const renderPrimaryAction = (order: Order) => {
-    if (order.status === "received") {
-      return renderActionButton(
-        order,
-        "accepted",
-        "Aceitar",
-        <Check size={16} aria-hidden />,
-        () => changeStatus(order, "accepted", "accepted"),
-      );
+    const statusAction = statusActionByCurrentStatus[order.status];
+
+    if (!statusAction) {
+      return null;
     }
 
-    if (order.status === "accepted") {
-      return renderActionButton(
-        order,
-        "preparing",
-        "Iniciar preparo",
-        <ChefHat size={16} aria-hidden />,
-        () => changeStatus(order, "preparing", "preparing"),
-      );
-    }
-
-    if (order.status === "preparing") {
-      return renderActionButton(
-        order,
-        "ready",
-        "Marcar pronto",
-        <Bell size={16} aria-hidden />,
-        () => changeStatus(order, "ready", "ready"),
-      );
-    }
-
-    if (order.status === "ready") {
-      return renderActionButton(
-        order,
-        "delivered",
-        "Finalizar",
-        <Check size={16} aria-hidden />,
-        () => changeStatus(order, "delivered", "delivered"),
-      );
-    }
-
-    return null;
+    return renderActionButton(
+      order,
+      statusAction.nextStatus,
+      statusAction.label,
+      statusAction.icon,
+      () => changeStatus(order, statusAction.nextStatus, statusAction.nextStatus),
+    );
   };
+
+  const selectedStatusAction = selectedOrder
+    ? statusActionByCurrentStatus[selectedOrder.status]
+    : undefined;
+  const selectedOrderDetailsAction =
+    selectedOrder && selectedStatusAction
+      ? {
+          label: selectedStatusAction.label,
+          icon: selectedStatusAction.icon,
+          isLoading:
+            pendingAction?.orderId === selectedOrder.id &&
+            pendingAction.action === selectedStatusAction.nextStatus,
+          onClick: () =>
+            void changeStatus(
+              selectedOrder,
+              selectedStatusAction.nextStatus,
+              selectedStatusAction.nextStatus,
+            ),
+        }
+      : undefined;
 
   return (
     <section className="orders-board">
@@ -465,8 +489,8 @@ export function OrdersBoard({
                         {order.tableLabel || order.customerName || "Balcão"}
                       </strong>
                       <small className="orders-board__order-meta">
-                        #{order.code} · {order.items.length} itens ·{" "}
-                        {formatCurrency(order.total)}
+                        #{order.code} · {order.items.length}{" "}
+                        {order.items.length === 1 ? "item" : "itens"} · {formatCurrency(order.total)}
                       </small>
                     </span>
                   </div>
@@ -620,6 +644,7 @@ export function OrdersBoard({
         <OrderDetailsDialog
           order={selectedOrder}
           onClose={() => setSelectedOrderId("")}
+          statusAction={selectedOrderDetailsAction}
         />
       ) : null}
 

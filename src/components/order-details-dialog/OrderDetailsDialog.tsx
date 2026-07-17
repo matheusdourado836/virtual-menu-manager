@@ -1,7 +1,8 @@
 "use client";
 
-import { CalendarClock, CreditCard, Phone, ReceiptText, Store, UserRound, X } from "lucide-react";
-import { useEffect } from "react";
+import { CalendarClock, CreditCard, Loader2, MessageSquareText, ReceiptText, Store, UserRound, X } from "lucide-react";
+import { type ReactNode, useEffect, useRef } from "react";
+import { useFocusTrap } from "@/components/ui/dialog/use-focus-trap";
 import { StatusPill } from "@/components/ui/status-pill/StatusPill";
 import { formatDateTime } from "@/lib/utils/dates";
 import { formatCurrency } from "@/lib/utils/money";
@@ -12,9 +13,18 @@ import "./order-details-dialog.scss";
 interface OrderDetailsDialogProps {
   order: Order;
   onClose: () => void;
+  statusAction?: {
+    label: string;
+    icon: ReactNode;
+    isLoading: boolean;
+    onClick: () => void;
+  };
 }
 
-export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) {
+export function OrderDetailsDialog({ order, onClose, statusAction }: OrderDetailsDialogProps) {
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef);
+
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -39,6 +49,7 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
   return (
     <div className="order-details-dialog" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
         className="order-details-dialog__panel"
         role="dialog"
         aria-modal="true"
@@ -163,7 +174,7 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
           {order.observation || order.cancelReason ? (
             <section className="order-details-dialog__section">
               <h3 className="order-details-dialog__section-title">
-                <Phone size={18} aria-hidden />
+                <MessageSquareText size={18} aria-hidden />
                 Observações
               </h3>
               {order.observation ? <p className="order-details-dialog__note">{order.observation}</p> : null}
@@ -205,6 +216,21 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
         </div>
 
         <footer className="order-details-dialog__footer">
+          {statusAction ? (
+            <button
+              className="order-details-dialog__button order-details-dialog__button--primary"
+              type="button"
+              onClick={statusAction.onClick}
+              disabled={statusAction.isLoading}
+            >
+              {statusAction.isLoading ? (
+                <Loader2 className="order-details-dialog__spinner" size={17} aria-hidden />
+              ) : (
+                statusAction.icon
+              )}
+              {statusAction.isLoading ? "Atualizando" : statusAction.label}
+            </button>
+          ) : null}
           <button className="order-details-dialog__button" type="button" onClick={onClose}>
             Fechar
           </button>

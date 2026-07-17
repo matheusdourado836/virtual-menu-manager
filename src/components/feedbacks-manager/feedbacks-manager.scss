@@ -33,6 +33,10 @@
     border-radius: var(--radius-pill);
     color: var(--color-text);
     background: var(--color-surface-muted);
+
+    &--rating {
+      color: var(--color-rating);
+    }
   }
 
   &__metric-value {
@@ -124,5 +128,9 @@
     background: var(--color-surface-muted);
     font-size: var(--text-sm);
     font-weight: 800;
+  }
+
+  &__rating-star {
+    color: var(--color-rating);
   }
 }

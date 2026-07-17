@@ -4,8 +4,10 @@ import { Minus, Plus, ShoppingBag, Store, Trash2, UserRound, X } from "lucide-re
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MenuItemDialog } from "@/components/menu-item-dialog/MenuItemDialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { createCartLine, getCartSubtotal, getLineTotal } from "@/features/cart/cart-utils";
 import { createAdminOrder, createTable } from "@/lib/services/store-service";
+import { getFriendlyErrorMessage } from "@/lib/errors/friendly-error";
 import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import type { CartLine, CartSelectedOption, MenuItem, PaymentMethod, StoreBundle, Table } from "@/types/menu";
@@ -37,11 +39,20 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
   const [error, setError] = useState("");
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
+
+  const requestClose = useCallback(() => {
+    if (cartLines.length > 0) {
+      setIsDiscardConfirmOpen(true);
+    } else {
+      onClose();
+    }
+  }, [cartLines.length, onClose]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !selectedItem) {
-        onClose();
+      if (event.key === "Escape" && !selectedItem && !isDiscardConfirmOpen) {
+        requestClose();
       }
     };
 
@@ -52,7 +63,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
       document.body.classList.remove("admin-order-dialog-open");
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [onClose, selectedItem]);
+  }, [requestClose, selectedItem, isDiscardConfirmOpen]);
 
   const visibleItems = useMemo(
     () => bundle.menuItems.filter((item) => item.categoryId === selectedCategory && item.isAvailable),
@@ -143,7 +154,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
       await onCreated();
       onFeedback("Mesa criada.");
     } catch (creationError) {
-      const message = creationError instanceof Error ? creationError.message : "Não foi possível criar a mesa.";
+      const message = getFriendlyErrorMessage(creationError, "Não foi possível criar a mesa.");
       setError(message);
       onFeedback(message, "error");
     } finally {
@@ -186,7 +197,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
       onFeedback("Pedido criado pelo painel.");
       onClose();
     } catch (creationError) {
-      const message = creationError instanceof Error ? creationError.message : "Não foi possível criar o pedido.";
+      const message = getFriendlyErrorMessage(creationError, "Não foi possível criar o pedido.");
       setError(message);
       onFeedback(message, "error");
     } finally {
@@ -200,7 +211,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
       role="presentation"
       onMouseDown={() => {
         if (!selectedItem) {
-          onClose();
+          requestClose();
         }
       }}
     >
@@ -218,7 +229,7 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
               Novo pedido
             </h2>
           </div>
-          <button className="admin-order-dialog__close" type="button" onClick={onClose} aria-label="Fechar">
+          <button className="admin-order-dialog__close" type="button" onClick={requestClose} aria-label="Fechar">
             <X size={20} aria-hidden />
           </button>
         </header>
@@ -458,6 +469,18 @@ export function AdminOrderDialog({ bundle, initialTableId, onClose, onCreated, o
             toggleOption(selectedItem, groupId, choiceId, maxSelected)
           }
           onAdd={(quantity) => addItem(selectedItem, quantity)}
+        />
+      ) : null}
+
+      {isDiscardConfirmOpen ? (
+        <ConfirmDialog
+          title="Descartar este pedido?"
+          description="Os itens já adicionados a este pedido serão perdidos."
+          confirmLabel="Descartar"
+          cancelLabel="Continuar editando"
+          loadingLabel="Descartando"
+          onCancel={() => setIsDiscardConfirmOpen(false)}
+          onConfirm={onClose}
         />
       ) : null}
     </div>

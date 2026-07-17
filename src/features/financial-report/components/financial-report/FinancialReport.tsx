@@ -23,6 +23,7 @@ import {
   getFinancialReportRange,
 } from "@/features/financial-report/utils/financial-calculations";
 import { downloadFinancialCsv } from "@/features/financial-report/utils/export-financial-csv";
+import { getFriendlyErrorMessage } from "@/lib/errors/friendly-error";
 import { formatDateTime } from "@/lib/utils/dates";
 import { formatCurrency } from "@/lib/utils/money";
 import { getPaymentMethodLabel } from "@/lib/utils/payment";
@@ -103,7 +104,7 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
         }
 
         setOrders([]);
-        setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o relatório.");
+        setError(getFriendlyErrorMessage(loadError, "Não foi possível carregar o relatório."));
       })
       .finally(() => {
         if (isMounted) {
@@ -310,6 +311,20 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
         </button>
       </div>
 
+      <button
+        className="financial-report__refresh"
+        type="button"
+        onClick={() => {
+          setIsLoading(true);
+          setError("");
+          setRefreshKey((current) => current + 1);
+        }}
+        disabled={isLoading}
+      >
+        <RefreshCw size={17} aria-hidden />
+        Atualizar
+      </button>
+
       {error ? (
         <div className="financial-report__error">
           <strong>Erro ao carregar relatório</strong>
@@ -512,20 +527,6 @@ export function FinancialReport({ storeId, tables }: FinancialReportProps) {
           </section>
         </div>
       )}
-
-      <button
-        className="financial-report__refresh"
-        type="button"
-        onClick={() => {
-          setIsLoading(true);
-          setError("");
-          setRefreshKey((current) => current + 1);
-        }}
-        disabled={isLoading}
-      >
-        <RefreshCw size={17} aria-hidden />
-        Atualizar relatório
-      </button>
     </section>
   );
 }
