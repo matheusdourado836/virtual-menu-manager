@@ -2,7 +2,8 @@
 
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusTrap } from "@/components/ui/dialog/use-focus-trap";
 import { MAX_ITEM_OBSERVATION_LENGTH, MAX_ORDER_ITEM_QUANTITY } from "@/lib/constants/order";
 import { formatCurrency } from "@/lib/utils/money";
 import type { MenuItem } from "@/types/menu";
@@ -33,6 +34,8 @@ export function MenuItemDialog({
 }: MenuItemDialogProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectionError, setSelectionError] = useState("");
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -105,6 +108,7 @@ export function MenuItemDialog({
   return (
     <div className="menu-item-dialog" role="presentation" onMouseDown={onClose}>
       <section
+        ref={panelRef}
         className="menu-item-dialog__sheet"
         role="dialog"
         aria-modal="true"

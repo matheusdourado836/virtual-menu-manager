@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, Clock3, ExternalLink, Loader2, Search, Send, Star, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, ExternalLink, Loader2, RefreshCw, Search, Send, Star, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
@@ -162,7 +162,7 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
 
   if (!order) {
     return (
-      <main className="order-tracker">
+      <main className="order-tracker order-tracker--centered">
         <section className="order-tracker__empty-card">
           <EmptyState
             icon={<Search size={28} aria-hidden />}
@@ -177,7 +177,16 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
               <ArrowLeft size={17} aria-hidden />
               Voltar ao cardápio
             </Link>
-          ) : null}
+          ) : (
+            <button
+              className="order-tracker__empty-action"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw size={17} aria-hidden />
+              Atualizar
+            </button>
+          )}
         </section>
       </main>
     );
@@ -193,9 +202,9 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
 
           <div className="order-tracker__finished-heading">
             <span className="order-tracker__eyebrow">Pedido finalizado</span>
-            <h1 className="order-tracker__title">Obrigado pelo pedido {order.code}</h1>
+            <h1 className="order-tracker__title">Obrigado, {order.customerName || "cliente"}!</h1>
             <p className="order-tracker__finished-text">
-              Sua experiência ajuda a loja a melhorar o atendimento.
+              O pedido {order.code} foi finalizado. Sua experiência ajuda a loja a melhorar o atendimento.
             </p>
           </div>
 
@@ -237,7 +246,7 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
                     aria-label={`${value} estrela${value === 1 ? "" : "s"}`}
                     aria-pressed={value <= rating}
                   >
-                    <Star size={24} aria-hidden />
+                    <Star fill={value <= rating ? "currentColor" : "none"} size={24} aria-hidden />
                   </button>
                 ))}
               </div>

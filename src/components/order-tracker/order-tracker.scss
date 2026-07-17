@@ -14,6 +14,10 @@
     padding: var(--space-6);
   }
 
+  &--centered {
+    place-items: center;
+  }
+
   &__card {
     width: min(100%, 42rem);
     display: grid;
@@ -304,7 +308,7 @@
     }
 
     &--selected {
-      color: var(--color-primary-readable);
+      color: var(--color-rating);
     }
   }
 
