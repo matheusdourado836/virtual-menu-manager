@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  MAX_CUSTOMER_NAME_LENGTH,
+  MAX_ITEM_OBSERVATION_LENGTH,
+  MAX_ORDER_ITEM_QUANTITY,
+  MAX_ORDER_OBSERVATION_LENGTH,
+  MIN_CUSTOMER_NAME_LENGTH,
+} from "@/lib/constants/order";
 
 export const orderStatusSchema = z.enum([
   "received",
@@ -20,20 +27,22 @@ export const createOrderSchema = z.object({
   storeId: z.string().min(1),
   tableId: z.string().optional(),
   tableLabel: z.string().optional(),
-  customerName: z.string().min(2).optional(),
+  customerName: z.string().trim().min(MIN_CUSTOMER_NAME_LENGTH).max(MAX_CUSTOMER_NAME_LENGTH).optional(),
   customerPhone: z.string().optional(),
   paymentMethod: paymentMethodSchema,
-  observation: z.string().max(500).optional(),
+  observation: z.string().max(MAX_ORDER_OBSERVATION_LENGTH).optional(),
   items: z
     .array(
       z.object({
         menuItemId: z.string().min(1),
-        quantity: z.number().int().min(1).max(20),
-        observation: z.string().max(300).optional(),
+        expectedUnitPrice: z.number().nonnegative().optional(),
+        quantity: z.number().int().min(1).max(MAX_ORDER_ITEM_QUANTITY),
+        observation: z.string().max(MAX_ITEM_OBSERVATION_LENGTH).optional(),
         selectedOptions: z.array(
           z.object({
             groupId: z.string().min(1),
             choiceId: z.string().min(1),
+            expectedPrice: z.number().nonnegative().optional(),
           }),
         ),
       }),

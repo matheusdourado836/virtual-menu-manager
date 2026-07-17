@@ -333,8 +333,8 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
 
         <div className="order-tracker__items">
           <h2 className="order-tracker__items-title">Itens</h2>
-          {order.items.map((item) => (
-            <article className="order-tracker__item" key={`${item.menuItemId}-${item.name}`}>
+          {order.items.map((item, itemIndex) => (
+            <article className="order-tracker__item" key={`${item.menuItemId}-${itemIndex}`}>
               <div className="order-tracker__item-copy">
                 <strong>
                   {item.quantity}x {item.name}

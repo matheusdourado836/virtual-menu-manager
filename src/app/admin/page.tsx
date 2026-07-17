@@ -1,5 +1,5 @@
-import { AdminShell } from "@/components/admin-shell/AdminShell";
+import { AdminEntry } from "@/components/admin-entry/AdminEntry";
 
 export default function AdminPage() {
-  return <AdminShell slug="cafe-carioca" />;
+  return <AdminEntry />;
 }

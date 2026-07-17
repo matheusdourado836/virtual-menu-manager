@@ -7,8 +7,22 @@ import { useEffect, useMemo, useState } from "react";
 import { ThemeScope } from "@/components/theme-scope/ThemeScope";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
-import { getCartSubtotal, getLineTotal, readStoredCart, writeStoredCart } from "@/features/cart/cart-utils";
+import {
+  describeCartReconciliation,
+  getCartSubtotal,
+  getLineTotal,
+  readStoredCart,
+  reconcileCartWithMenu,
+  writeStoredCart,
+} from "@/features/cart/cart-utils";
 import { writeStoredOrderReference } from "@/features/order-tracking/order-tracking-storage";
+import {
+  MAX_CUSTOMER_NAME_LENGTH,
+  MAX_ORDER_ITEM_QUANTITY,
+  MAX_ORDER_OBSERVATION_LENGTH,
+  MIN_CUSTOMER_NAME_LENGTH,
+} from "@/lib/constants/order";
+import { reportCartReconciliation, reportOrderSubmissionError } from "@/lib/errors/order-submission-error";
 import { createOrder, getStoreBundleBySlug } from "@/lib/services/store-service";
 import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
@@ -60,7 +74,20 @@ export function CartPage({ slug, tableId }: CartPageProps) {
         setBundle(loadedBundle);
 
         if (loadedBundle) {
-          setCartLines(readStoredCart(loadedBundle.store.id, tableId));
+          const storedCart = readStoredCart(loadedBundle.store.id, tableId);
+          const reconciliation = reconcileCartWithMenu(storedCart, loadedBundle.menuItems);
+
+          setCartLines(reconciliation.lines);
+
+          if (reconciliation.changes.length) {
+            writeStoredCart(loadedBundle.store.id, tableId, reconciliation.lines);
+            setError(describeCartReconciliation(reconciliation.changes));
+            reportCartReconciliation(reconciliation.changes, {
+              storeId: loadedBundle.store.id,
+              storeSlug: slug,
+              tableId,
+            });
+          }
         }
 
         setLoadError("");
@@ -102,6 +129,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
   const isTableOrder = Boolean(table);
 
   const updateCart = (lines: CartLine[]) => {
+    setError("");
     setCartLines(lines);
 
     if (bundle) {
@@ -115,7 +143,8 @@ export function CartPage({ slug, tableId }: CartPageProps) {
       return;
     }
 
-    updateCart(cartLines.map((line) => (line.id === lineId ? { ...line, quantity } : line)));
+    const safeQuantity = Math.min(quantity, MAX_ORDER_ITEM_QUANTITY);
+    updateCart(cartLines.map((line) => (line.id === lineId ? { ...line, quantity: safeQuantity } : line)));
   };
 
   const removeLine = (lineId: string) => {
@@ -134,8 +163,8 @@ export function CartPage({ slug, tableId }: CartPageProps) {
       return;
     }
 
-    if (!isTableOrder && !customerName.trim()) {
-      setError("Informe seu nome para identificar o pedido.");
+    if (!isTableOrder && customerName.trim().length < MIN_CUSTOMER_NAME_LENGTH) {
+      setError(`Informe um nome com pelo menos ${MIN_CUSTOMER_NAME_LENGTH} caracteres.`);
       return;
     }
 
@@ -146,6 +175,11 @@ export function CartPage({ slug, tableId }: CartPageProps) {
 
     if (!cartLines.length) {
       setError("Adicione pelo menos um item ao carrinho.");
+      return;
+    }
+
+    if (cartLines.some((line) => line.quantity < 1 || line.quantity > MAX_ORDER_ITEM_QUANTITY)) {
+      setError(`Cada item pode ter no máximo ${MAX_ORDER_ITEM_QUANTITY} unidades. Revise o carrinho.`);
       return;
     }
 
@@ -162,11 +196,13 @@ export function CartPage({ slug, tableId }: CartPageProps) {
         observation: observation.trim() || undefined,
         items: cartLines.map((line) => ({
           menuItemId: line.menuItemId,
+          expectedUnitPrice: line.unitPrice,
           quantity: line.quantity,
           observation: line.observation,
           selectedOptions: line.selectedOptions.map((option) => ({
             groupId: option.groupId,
             choiceId: option.choiceId,
+            expectedPrice: option.price,
           })),
         })),
       });
@@ -175,7 +211,159 @@ export function CartPage({ slug, tableId }: CartPageProps) {
       updateCart([]);
       router.push(`/pedido/${order.id}`);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Não foi possível enviar o pedido.");
+      const failure = reportOrderSubmissionError(submitError, {
+        storeId: bundle.store.id,
+        storeSlug: slug,
+        tableId: table?.id,
+        paymentMethod,
+        itemIds: cartLines.map((line) => line.menuItemId),
+        unitsCount: cartLines.reduce((total, line) => total + line.quantity, 0),
+        selectedOptionsCount: cartLines.reduce((total, line) => total + line.selectedOptions.length, 0),
+        hasCustomerPhone: Boolean(customerPhone.trim()),
+        hasObservation: Boolean(observation.trim()),
+      });
+      const supportCode = failure.supportCode || (!failure.isExpected ? failure.eventId.slice(0, 8).toUpperCase() : "");
+      const isUnavailableAdditional =
+        failure.reason === "additional_unavailable" || failure.reason === "additional_removed";
+      const storedItem = failure.itemId
+        ? cartLines.find((line) => line.menuItemId === failure.itemId)
+        : undefined;
+      const storedChoice = failure.choiceId
+        ? cartLines
+          .filter((line) => !failure.itemId || line.menuItemId === failure.itemId)
+          .flatMap((line) => line.selectedOptions)
+          .find((option) => option.choiceId === failure.choiceId)
+        : undefined;
+      let errorMessage = failure.message;
+
+      if (failure.reason === "item_unavailable" && failure.itemId) {
+        const itemName = failure.itemName || storedItem?.name || "Este item";
+        const updatedLines = cartLines.filter((line) => line.menuItemId !== failure.itemId);
+
+        errorMessage = `O item ${itemName} não está mais disponível.`;
+
+        if (updatedLines.length !== cartLines.length) {
+          updateCart(updatedLines);
+          errorMessage = updatedLines.length
+            ? `${errorMessage} Ele foi removido do seu pedido. Confira o carrinho e tente novamente.`
+            : `${errorMessage} Ele foi removido e seu carrinho ficou vazio. Volte ao cardápio para escolher outro item.`;
+        }
+      }
+
+      if (failure.reason === "additional_removed" && storedChoice?.choiceName) {
+        errorMessage = `O adicional ${storedChoice.choiceName} não está mais disponível.`;
+      }
+
+      if (isUnavailableAdditional && failure.choiceId) {
+        let didUpdateCart = false;
+        const updatedLines = cartLines.map((line) => {
+          if (failure.itemId && line.menuItemId !== failure.itemId) {
+            return line;
+          }
+
+          const selectedOptions = line.selectedOptions.filter((option) => option.choiceId !== failure.choiceId);
+
+          if (selectedOptions.length === line.selectedOptions.length) {
+            return line;
+          }
+
+          didUpdateCart = true;
+          return { ...line, selectedOptions };
+        });
+
+        if (didUpdateCart) {
+          updateCart(updatedLines);
+          errorMessage = `${errorMessage} Ele foi removido do seu pedido. Confira o carrinho e tente novamente.`;
+        }
+      }
+
+      if (failure.reason === "options_group_changed" && failure.itemId && failure.groupId) {
+        let didUpdateCart = false;
+        const updatedLines = cartLines.map((line) => {
+          if (line.menuItemId !== failure.itemId) return line;
+
+          const selectedOptions = line.selectedOptions.filter((option) => option.groupId !== failure.groupId);
+
+          if (selectedOptions.length === line.selectedOptions.length) return line;
+
+          didUpdateCart = true;
+          return { ...line, selectedOptions };
+        });
+
+        if (didUpdateCart) {
+          updateCart(updatedLines);
+          errorMessage = `${errorMessage} As opções antigas foram removidas. Confira o carrinho e tente novamente.`;
+        }
+      }
+
+      if (failure.reason === "item_price_changed" && failure.itemId && failure.currentPrice !== undefined) {
+        let didUpdateCart = false;
+        const updatedLines = cartLines.map((line) => {
+          if (line.menuItemId !== failure.itemId || line.unitPrice === failure.currentPrice) return line;
+
+          didUpdateCart = true;
+          return { ...line, unitPrice: failure.currentPrice! };
+        });
+        const itemName = failure.itemName || storedItem?.name || "o item";
+        const previousPrice = failure.previousPrice ?? storedItem?.unitPrice;
+
+        errorMessage = previousPrice !== undefined
+          ? `O preço de ${itemName} mudou de ${formatCurrency(previousPrice)} para ${formatCurrency(failure.currentPrice)}.`
+          : `O preço de ${itemName} foi atualizado para ${formatCurrency(failure.currentPrice)}.`;
+
+        if (didUpdateCart) {
+          updateCart(updatedLines);
+          errorMessage = `${errorMessage} O carrinho foi atualizado. Confira o total e tente novamente.`;
+        }
+      }
+
+      if (
+        failure.reason === "additional_price_changed"
+        && failure.itemId
+        && failure.choiceId
+        && failure.currentPrice !== undefined
+      ) {
+        let didUpdateCart = false;
+        const updatedLines = cartLines.map((line) => {
+          if (line.menuItemId !== failure.itemId) return line;
+
+          const selectedOptions = line.selectedOptions.map((option) => {
+            if (option.choiceId !== failure.choiceId || option.price === failure.currentPrice) return option;
+
+            didUpdateCart = true;
+            return { ...option, price: failure.currentPrice! };
+          });
+
+          return didUpdateCart ? { ...line, selectedOptions } : line;
+        });
+        const choiceName = failure.choiceName || storedChoice?.choiceName || "adicional";
+        const previousPrice = failure.previousPrice ?? storedChoice?.price;
+
+        errorMessage = previousPrice !== undefined
+          ? `O preço do adicional ${choiceName} mudou de ${formatCurrency(previousPrice)} para ${formatCurrency(failure.currentPrice)}.`
+          : `O preço do adicional ${choiceName} foi atualizado para ${formatCurrency(failure.currentPrice)}.`;
+
+        if (didUpdateCart) {
+          updateCart(updatedLines);
+          errorMessage = `${errorMessage} O carrinho foi atualizado. Confira o total e tente novamente.`;
+        }
+      }
+
+      if (
+        failure.itemId
+        && ["required_options_missing", "options_limit_exceeded", "options_invalid"].includes(failure.reason || "")
+      ) {
+        const updatedLines = cartLines.filter((line) => line.menuItemId !== failure.itemId);
+
+        if (updatedLines.length !== cartLines.length) {
+          updateCart(updatedLines);
+          errorMessage = updatedLines.length
+            ? `${errorMessage} O item foi removido para ser personalizado novamente.`
+            : `${errorMessage} O item foi removido e seu carrinho ficou vazio.`;
+        }
+      }
+
+      setError(`${errorMessage}${supportCode ? ` Código de suporte: ${supportCode}.` : ""}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -212,6 +400,8 @@ export function CartPage({ slug, tableId }: CartPageProps) {
               <strong className="cart-page__total">{formatCurrency(subtotal)}</strong>
             </span>
           </div>
+
+          {error ? <p className="cart-page__error" role="alert">{error}</p> : null}
 
           <div className="cart-page__layout">
             <section className="cart-page__items-panel">
@@ -258,6 +448,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                           className="cart-page__icon-button"
                           type="button"
                           onClick={() => updateQuantity(line.id, line.quantity + 1)}
+                          disabled={line.quantity >= MAX_ORDER_ITEM_QUANTITY}
                           aria-label="Aumentar quantidade"
                           title="Aumentar quantidade"
                         >
@@ -318,6 +509,7 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                         <input
                           className="cart-page__control"
                           value={customerName}
+                          maxLength={MAX_CUSTOMER_NAME_LENGTH}
                           placeholder="Como podemos chamar você?"
                           onChange={(event) => setCustomerName(event.target.value)}
                           required
@@ -358,8 +550,9 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                   <label className="cart-page__field">
                     <span className="cart-page__label">Observação do pedido</span>
                     <textarea
-                      className="cart-page__control cart-page__control--textarea"
-                      value={observation}
+                          className="cart-page__control cart-page__control--textarea"
+                          value={observation}
+                          maxLength={MAX_ORDER_OBSERVATION_LENGTH}
                       rows={3}
                       placeholder="Algo que precisamos saber?"
                       onChange={(event) => setObservation(event.target.value)}
@@ -371,8 +564,6 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                   <span className="cart-page__summary-label">Total do pedido</span>
                   <strong className="cart-page__summary-total">{formatCurrency(subtotal)}</strong>
                 </div>
-
-                {error ? <p className="cart-page__error">{error}</p> : null}
 
                 <button className="cart-page__submit" type="button" disabled={isSubmitting} onClick={submitOrder}>
                   <Send size={18} aria-hidden />

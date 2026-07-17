@@ -2,7 +2,7 @@ import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, wh
 import { httpsCallable } from "firebase/functions";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebaseFunctions, firebaseStorage, firestore } from "@/lib/firebase/client";
-import type { CreateOrderPayload } from "@/lib/validators/order";
+import { createOrderSchema, type CreateOrderPayload } from "@/lib/validators/order";
 import type {
   Additional,
   Category,
@@ -75,6 +75,16 @@ export interface FeedbackInput {
   comment?: string;
 }
 
+export interface ManagedStoreSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  isActive: boolean;
+  isAcceptingOrders: boolean;
+  accessRole: "owner" | "admin" | "platformAdmin";
+}
+
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map((item) => removeUndefined(item)) as T;
@@ -136,14 +146,42 @@ export const getAdminStoreBundleBySlug = async (slug: string): Promise<StoreBund
   return response.data as StoreBundle;
 };
 
+export const getManagedStores = async (): Promise<ManagedStoreSummary[]> => {
+  const callable = httpsCallable<Record<string, never>, { stores: ManagedStoreSummary[] }>(
+    firebaseFunctions,
+    "listManagedStores",
+  );
+  const response = await callable({});
+
+  return response.data.stores;
+};
+
 export const getStoreById = async (storeId: string): Promise<Store | null> => {
   const storeDocument = await getDoc(doc(firestore, "stores", storeId));
   return storeDocument.exists() ? ({ id: storeDocument.id, ...storeDocument.data() } as Store) : null;
 };
 
 export const createOrder = async (payload: CreateOrderPayload) => {
+  const validation = createOrderSchema.safeParse(payload);
+
+  if (!validation.success) {
+    const validationError = new Error("Revise os dados e os itens do pedido antes de tentar novamente.") as Error & {
+      code: string;
+      details: { validationIssues: Array<{ field: string; code: string }> };
+    };
+    validationError.name = "OrderValidationError";
+    validationError.code = "validation/invalid-order";
+    validationError.details = {
+      validationIssues: validation.error.issues.map((issue) => ({
+        field: issue.path.join("."),
+        code: issue.code,
+      })),
+    };
+    throw validationError;
+  }
+
   const callable = httpsCallable(firebaseFunctions, "createOrder");
-  const response = await callable(removeUndefined(payload));
+  const response = await callable(removeUndefined(validation.data));
 
   return response.data as Order;
 };

@@ -140,8 +140,11 @@ export function OrderDetailsDialog({ order, onClose }: OrderDetailsDialogProps) 
 
                   {item.selectedOptions.length ? (
                     <ul className="order-details-dialog__options">
-                      {item.selectedOptions.map((option) => (
-                        <li className="order-details-dialog__option" key={`${item.menuItemId}-${option.choiceId}`}>
+                      {item.selectedOptions.map((option, optionIndex) => (
+                        <li
+                          className="order-details-dialog__option"
+                          key={`${option.groupId}-${option.choiceId}-${optionIndex}`}
+                        >
                           <span>{option.choiceName}</span>
                           <strong className="order-details-dialog__option-price">+ {formatCurrency(option.price)}</strong>
                         </li>

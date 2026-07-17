@@ -11,15 +11,18 @@ import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
 import {
   createCartLine,
+  describeCartReconciliation,
   getCartQuantity,
   getCartSubtotal,
   readStoredCart,
+  reconcileCartWithMenu,
   writeStoredCart,
 } from "@/features/cart/cart-utils";
 import {
   readAndClearMenuNotice,
   readStoredOrderReference,
 } from "@/features/order-tracking/order-tracking-storage";
+import { reportCartReconciliation } from "@/lib/errors/order-submission-error";
 import { getStoreBundleBySlug } from "@/lib/services/store-service";
 import { getStoreOpenState } from "@/lib/utils/opening-hours";
 import { formatCurrency } from "@/lib/utils/money";
@@ -32,6 +35,16 @@ interface PublicMenuProps {
 }
 
 const minuteInMilliseconds = 60 * 1000;
+
+const getVisibleCategories = (bundle: StoreBundle) => {
+  const availableCategoryIds = new Set(
+    bundle.menuItems
+      .filter((item) => item.isAvailable)
+      .map((item) => item.categoryId),
+  );
+
+  return bundle.categories.filter((category) => category.isActive && availableCategoryIds.has(category.id));
+};
 
 export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
@@ -58,20 +71,36 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
         }
 
         const loadedTable = loadedBundle?.tables.find((candidate) => candidate.id === tableId && candidate.isActive);
+        const storedCart = loadedBundle ? readStoredCart(loadedBundle.store.id, loadedTable?.id) : [];
+        const reconciliation = loadedBundle
+          ? reconcileCartWithMenu(storedCart, loadedBundle.menuItems)
+          : { lines: [], changes: [] };
+        const navigationNotice = loadedBundle
+          ? readAndClearMenuNotice(
+            loadedTable?.id ? `/loja/${loadedBundle.store.slug}/mesa/${loadedTable.id}` : `/loja/${loadedBundle.store.slug}`,
+          ) || ""
+          : "";
+        const reconciliationNotice = reconciliation.changes.length
+          ? describeCartReconciliation(reconciliation.changes)
+          : "";
 
         setBundle(loadedBundle);
-        setSelectedCategory(loadedBundle?.categories[0]?.id || "");
-        setCartLines(loadedBundle ? readStoredCart(loadedBundle.store.id, loadedTable?.id) : []);
+        setSelectedCategory(loadedBundle ? getVisibleCategories(loadedBundle)[0]?.id || "" : "");
+        setCartLines(reconciliation.lines);
         setTrackedOrderId(
           loadedBundle ? readStoredOrderReference(loadedBundle.store.id, loadedTable?.id)?.orderId || "" : "",
         );
-        setNotice(
-          loadedBundle
-            ? readAndClearMenuNotice(
-                loadedTable?.id ? `/loja/${loadedBundle.store.slug}/mesa/${loadedTable.id}` : `/loja/${loadedBundle.store.slug}`,
-              ) || ""
-            : "",
-        );
+        setNotice([navigationNotice, reconciliationNotice].filter(Boolean).join(" "));
+
+        if (loadedBundle && reconciliation.changes.length) {
+          writeStoredCart(loadedBundle.store.id, loadedTable?.id, reconciliation.lines);
+          reportCartReconciliation(reconciliation.changes, {
+            storeId: loadedBundle.store.id,
+            storeSlug: loadedBundle.store.slug,
+            tableId: loadedTable?.id,
+          });
+        }
+
         setHasLoadedCart(Boolean(loadedBundle));
         setLoadError("");
       })
@@ -102,6 +131,10 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const table = useMemo(
     () => bundle?.tables.find((candidate) => candidate.id === tableId && candidate.isActive),
     [bundle, tableId],
+  );
+  const visibleCategories = useMemo(
+    () => bundle ? getVisibleCategories(bundle) : [],
+    [bundle],
   );
 
   const visibleItems = useMemo(() => {
@@ -191,7 +224,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const cartLink = table?.id ? `/loja/${slug}/mesa/${table.id}/carrinho` : `/loja/${slug}/carrinho`;
   const cartQuantity = getCartQuantity(cartLines);
   const cartSubtotal = getCartSubtotal(cartLines);
-  const activeCategory = bundle?.categories.find((category) => category.id === selectedCategory);
+  const activeCategory = visibleCategories.find((category) => category.id === selectedCategory);
   const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
   const canReceiveOrders = storeOpenState?.isOpen ?? false;
 
@@ -262,23 +295,25 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
           </div>
         </header>
 
-        <nav className="public-menu__category-tabs" role="tablist" aria-label="Categorias">
-          {bundle.categories.map((category) => (
-            <button
-              className={`public-menu__category-tab${
-                selectedCategory === category.id ? " public-menu__category-tab--active" : ""
-              }`}
-              type="button"
-              role="tab"
-              aria-selected={selectedCategory === category.id}
-              key={category.id}
-              onClick={() => setSelectedCategory(category.id)}
-            >
-              {category.name === "Bebidas" ? <Coffee size={16} aria-hidden /> : <Utensils size={16} aria-hidden />}
-              {category.name}
-            </button>
-          ))}
-        </nav>
+        {visibleCategories.length ? (
+          <nav className="public-menu__category-tabs" role="tablist" aria-label="Categorias">
+            {visibleCategories.map((category) => (
+              <button
+                className={`public-menu__category-tab${
+                  selectedCategory === category.id ? " public-menu__category-tab--active" : ""
+                }`}
+                type="button"
+                role="tab"
+                aria-selected={selectedCategory === category.id}
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                {category.name === "Bebidas" ? <Coffee size={16} aria-hidden /> : <Utensils size={16} aria-hidden />}
+                {category.name}
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
         {!canReceiveOrders ? (
           <div className="public-menu__notice" role="status">
@@ -324,9 +359,9 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                     className="public-menu__item-image"
                     src={item.imageUrl || "/placeholder-item.svg"}
                     alt=""
-                    width={120}
-                    height={120}
-                    unoptimized
+                    width={92}
+                    height={92}
+                    sizes="92px"
                   />
                 </button>
                 <div className="public-menu__item-body">

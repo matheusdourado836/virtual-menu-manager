@@ -290,6 +290,15 @@
     }
   }
 
+  &__selection-error {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+    font-size: var(--text-xs);
+    font-weight: 700;
+  }
+
   &__footer {
     border-top: var(--border-thin) solid var(--color-border-strong);
   }

@@ -3,6 +3,7 @@
 import { Check, Minus, Plus, ShoppingBag, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { MAX_ITEM_OBSERVATION_LENGTH, MAX_ORDER_ITEM_QUANTITY } from "@/lib/constants/order";
 import { formatCurrency } from "@/lib/utils/money";
 import type { MenuItem } from "@/types/menu";
 import "./menu-item-dialog.scss";
@@ -31,6 +32,7 @@ export function MenuItemDialog({
   onToggleOption,
 }: MenuItemDialogProps) {
   const [quantity, setQuantity] = useState(1);
+  const [selectionError, setSelectionError] = useState("");
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -71,6 +73,34 @@ export function MenuItemDialog({
         .filter((group) => group.choices.length > 0),
     [item.optionsGroups],
   );
+  const requiredSelectionIssue = useMemo(() => {
+    for (const group of item.optionsGroups) {
+      const availableChoices = group.choices.filter((choice) => choice.isAvailable);
+      const minimumRequired = Math.max(Number(group.minSelected) || 0, group.isRequired ? 1 : 0);
+      const selectedCount = availableChoices.filter((choice) => selectedOptionIds.includes(choice.id)).length;
+
+      if (selectedCount < minimumRequired) {
+        const selectionLabel = minimumRequired === 1 ? "uma opção" : `${minimumRequired} opções`;
+        const hasEnoughAvailableChoices = availableChoices.length >= minimumRequired;
+
+        return hasEnoughAvailableChoices
+          ? `Escolha pelo menos ${selectionLabel} em ${group.name}.`
+          : `As opções obrigatórias de ${group.name} estão indisponíveis no momento.`;
+      }
+    }
+
+    return "";
+  }, [item.optionsGroups, selectedOptionIds]);
+
+  const addConfiguredItem = () => {
+    if (requiredSelectionIssue) {
+      setSelectionError(requiredSelectionIssue);
+      return;
+    }
+
+    setSelectionError("");
+    onAdd(quantity);
+  };
 
   return (
     <div className="menu-item-dialog" role="presentation" onMouseDown={onClose}>
@@ -106,9 +136,9 @@ export function MenuItemDialog({
                 className="menu-item-dialog__image"
                 src={item.imageUrl || "/placeholder-item.svg"}
                 alt=""
-                width={160}
-                height={120}
-                unoptimized
+                width={80}
+                height={80}
+                sizes="80px"
               />
             </button>
             <div className="menu-item-dialog__summary-copy">
@@ -119,6 +149,12 @@ export function MenuItemDialog({
 
           {visibleOptionGroups.map((group) => {
             const selectedCount = group.choices.filter((choice) => selectedOptionIds.includes(choice.id)).length;
+            const minimumRequired = Math.max(Number(group.minSelected) || 0, group.isRequired ? 1 : 0);
+            const selectionHint = minimumRequired > 0
+              ? minimumRequired === 1
+                ? "Escolha obrigatória"
+                : `Escolha pelo menos ${minimumRequired}`
+              : "Escolha se desejar";
 
             return (
               <section className="menu-item-dialog__group" key={group.id}>
@@ -126,7 +162,7 @@ export function MenuItemDialog({
                   <div>
                     <h3 className="menu-item-dialog__group-title">{group.name}</h3>
                     <p className="menu-item-dialog__group-hint">
-                      {group.isRequired ? "Escolha obrigatória" : "Escolha se desejar"} · até {group.maxSelected}
+                      {selectionHint} · até {group.maxSelected}
                     </p>
                   </div>
                   <span className="menu-item-dialog__group-count">
@@ -146,7 +182,10 @@ export function MenuItemDialog({
                         type="button"
                         aria-pressed={isSelected}
                         key={choice.id}
-                        onClick={() => onToggleOption(group.id, choice.id, group.maxSelected)}
+                        onClick={() => {
+                          setSelectionError("");
+                          onToggleOption(group.id, choice.id, group.maxSelected);
+                        }}
                       >
                         <span className="menu-item-dialog__choice-copy">
                           <strong className="menu-item-dialog__choice-name">{choice.name}</strong>
@@ -172,11 +211,18 @@ export function MenuItemDialog({
             <textarea
               className="menu-item-dialog__note"
               value={note}
+              maxLength={MAX_ITEM_OBSERVATION_LENGTH}
               rows={3}
               placeholder="Ex.: sem cebola, cortar ao meio..."
               onChange={(event) => onNoteChange(event.target.value)}
             />
           </label>
+
+          {selectionError ? (
+            <p className="menu-item-dialog__selection-error" role="alert">
+              {selectionError}
+            </p>
+          ) : null}
         </div>
 
         <footer className="menu-item-dialog__footer">
@@ -185,6 +231,7 @@ export function MenuItemDialog({
               className="menu-item-dialog__quantity-button"
               type="button"
               onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+              disabled={quantity <= 1}
               aria-label="Diminuir quantidade"
             >
               <Minus size={17} aria-hidden />
@@ -193,14 +240,15 @@ export function MenuItemDialog({
             <button
               className="menu-item-dialog__quantity-button"
               type="button"
-              onClick={() => setQuantity((current) => current + 1)}
+              onClick={() => setQuantity((current) => Math.min(MAX_ORDER_ITEM_QUANTITY, current + 1))}
+              disabled={quantity >= MAX_ORDER_ITEM_QUANTITY}
               aria-label="Aumentar quantidade"
             >
               <Plus size={17} aria-hidden />
             </button>
           </div>
 
-          <button className="menu-item-dialog__add" type="button" onClick={() => onAdd(quantity)}>
+          <button className="menu-item-dialog__add" type="button" onClick={addConfiguredItem}>
             <ShoppingBag size={18} aria-hidden />
             Adicionar
             <strong className="menu-item-dialog__add-total">{formatCurrency(unitTotal * quantity)}</strong>

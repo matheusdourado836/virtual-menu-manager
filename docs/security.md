@@ -14,7 +14,10 @@ O front-end usa essa informação apenas para UX. A autorização real fica em F
 
 - `setUserClaims`: exige `platformAdmin`.
 - `createStore`: exige `platformAdmin`.
+- `listPlatformStores`, `listPlatformUsers`, `createPlatformUser` e `updatePlatformStore`: exigem `platformAdmin`.
+- `listManagedStores`: exige autenticação e retorna somente vínculos em `owners`/`adminUsers`; para `platformAdmin`, retorna todas as lojas.
 - `createOrder`: pública, mas calcula preço/total no backend usando cardápio oficial.
+- O diagnóstico do checkout no Sentry não inclui nome, telefone nem observações; usa somente metadados operacionais e IDs técnicos.
 - `updateOrderStatus`: exige dono/admin da loja ou `platformAdmin`.
 - `generateTableQrCode`: exige dono/admin da loja ou `platformAdmin`.
 

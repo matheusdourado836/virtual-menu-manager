@@ -1,5 +1,7 @@
 import * as admin from "firebase-admin";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { error as logError } from "firebase-functions/logger";
+import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import { z } from "zod";
 
@@ -146,12 +148,14 @@ const createOrderSchema = z.object({
     .array(
       z.object({
         menuItemId: z.string().min(1),
+        expectedUnitPrice: z.number().nonnegative().optional(),
         quantity: z.number().int().min(1).max(20),
         observation: nullableOptionalText(300),
         selectedOptions: z.array(
           z.object({
             groupId: z.string().min(1),
             choiceId: z.string().min(1),
+            expectedPrice: z.number().nonnegative().optional(),
           }),
         ),
       }),
@@ -159,17 +163,73 @@ const createOrderSchema = z.object({
     .min(1),
 });
 
+const parseCreateOrderPayload = (data: unknown) => {
+  const result = createOrderSchema.safeParse(data);
+
+  if (!result.success) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Revise os dados e os itens do pedido antes de tentar novamente.",
+      {
+        validationIssues: result.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          code: issue.code,
+        })),
+      },
+    );
+  }
+
+  return result.data;
+};
+
 const setClaimsSchema = z.object({
   uid: z.string().min(1),
   claims: z.record(z.string(), z.boolean()),
 });
 
+const storeSlugSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(2)
+  .max(80)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "Use apenas letras minúsculas, números e hífens no slug.");
+
+const storeUserIdsSchema = z.array(z.string().trim().min(1)).max(50).transform((userIds) => [...new Set(userIds)]);
+
 const createStoreSchema = z.object({
-  name: z.string().min(2),
-  slug: z.string().min(2),
-  description: z.string().default(""),
-  owners: z.array(z.string()).min(1),
-  adminUsers: z.array(z.string()).default([]),
+  name: z.string().trim().min(2).max(120),
+  slug: storeSlugSchema,
+  description: z.string().trim().max(500).default(""),
+  phone: optionalTrimmedValue(80),
+  address: optionalTrimmedValue(240),
+  openingHours: optionalTrimmedValue(240),
+  owners: storeUserIdsSchema.refine((userIds) => userIds.length > 0, "Selecione ao menos um proprietário."),
+  adminUsers: storeUserIdsSchema.default([]),
+  isActive: z.boolean().default(true),
+  isAcceptingOrders: z.boolean().default(true),
+  estimatedPrepMinutes: z.number().int().min(1).max(240).default(20),
+  createStarterData: z.boolean().default(true),
+  publicBaseUrl: z.string().url().optional(),
+});
+
+const updatePlatformStoreSchema = z.object({
+  storeId: z.string().trim().min(1),
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(500).default(""),
+  phone: optionalTrimmedValue(80),
+  address: optionalTrimmedValue(240),
+  openingHours: optionalTrimmedValue(240),
+  owners: storeUserIdsSchema.refine((userIds) => userIds.length > 0, "Selecione ao menos um proprietário."),
+  adminUsers: storeUserIdsSchema.default([]),
+  isActive: z.boolean(),
+  isAcceptingOrders: z.boolean(),
+  estimatedPrepMinutes: z.number().int().min(1).max(240),
+});
+
+const createPlatformUserSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+  displayName: z.string().trim().min(2).max(120),
 });
 
 const updateStatusSchema = z.object({
@@ -349,6 +409,66 @@ const assertPlatformAdmin = (auth: { token?: admin.auth.DecodedIdToken } | undef
   }
 };
 
+const assertKnownUsers = async (userIds: string[]) => {
+  const uniqueUserIds = [...new Set(userIds)];
+
+  if (uniqueUserIds.length === 0) {
+    return;
+  }
+
+  const result = await admin.auth().getUsers(uniqueUserIds.map((uid) => ({ uid })));
+
+  if (result.notFound.length > 0) {
+    throw new HttpsError("failed-precondition", "Um ou mais usuários selecionados não existem no Firebase Auth.");
+  }
+
+  if (result.users.some((user) => user.disabled)) {
+    throw new HttpsError("failed-precondition", "Uma ou mais contas selecionadas estão desativadas.");
+  }
+};
+
+const platformStoreFields = (storeId: string, data: admin.firestore.DocumentData) => ({
+  id: storeId,
+  name: String(data.name || ""),
+  slug: String(data.slug || ""),
+  description: String(data.description || ""),
+  phone: String(data.phone || ""),
+  address: String(data.address || ""),
+  openingHours: String(data.openingHours || ""),
+  owners: Array.isArray(data.owners) ? data.owners.filter((uid): uid is string => typeof uid === "string") : [],
+  adminUsers: Array.isArray(data.adminUsers)
+    ? data.adminUsers.filter((uid): uid is string => typeof uid === "string")
+    : [],
+  isActive: data.isActive === true,
+  isAcceptingOrders: data.isAcceptingOrders === true,
+  estimatedPrepMinutes: Number(data.estimatedPrepMinutes || 20),
+  createdAt: String(data.createdAt || ""),
+  updatedAt: String(data.updatedAt || ""),
+});
+
+const managedStoreFields = (
+  storeId: string,
+  data: admin.firestore.DocumentData,
+  userId: string,
+) => {
+  const store = platformStoreFields(storeId, data);
+  const accessRole: "owner" | "admin" | "platformAdmin" = store.owners.includes(userId)
+    ? "owner"
+    : store.adminUsers.includes(userId)
+      ? "admin"
+      : "platformAdmin";
+
+  return {
+    id: store.id,
+    name: store.name,
+    slug: store.slug,
+    description: store.description,
+    isActive: store.isActive,
+    isAcceptingOrders: store.isAcceptingOrders,
+    accessRole,
+  };
+};
+
 const assertStoreAdmin = async (storeId: string, auth: { uid?: string; token?: admin.auth.DecodedIdToken } | undefined) => {
   if (!auth?.uid) {
     throw new HttpsError("unauthenticated", "Autenticação obrigatória.");
@@ -406,27 +526,249 @@ export const setUserClaims = onCall(async (request) => {
   return { ok: true };
 });
 
+export const listPlatformStores = onCall(async (request) => {
+  assertPlatformAdmin(request.auth);
+  const snapshot = await db.collection("stores").get();
+  const stores = snapshot.docs.map((document) => platformStoreFields(document.id, document.data()));
+
+  stores.sort((first, second) => (first.name || first.slug).localeCompare(second.name || second.slug, "pt-BR"));
+  return { stores };
+});
+
+export const listManagedStores = onCall(async (request) => {
+  const userId = request.auth?.uid;
+
+  if (!userId) {
+    throw new HttpsError("unauthenticated", "Autenticação obrigatória.");
+  }
+
+  const isPlatformAdmin = request.auth?.token?.platformAdmin === true;
+  const documents = new Map<string, admin.firestore.QueryDocumentSnapshot>();
+
+  if (isPlatformAdmin) {
+    const snapshot = await db.collection("stores").get();
+    snapshot.docs.forEach((document) => documents.set(document.id, document));
+  } else {
+    const [ownerSnapshot, adminSnapshot] = await Promise.all([
+      db.collection("stores").where("owners", "array-contains", userId).get(),
+      db.collection("stores").where("adminUsers", "array-contains", userId).get(),
+    ]);
+
+    [...ownerSnapshot.docs, ...adminSnapshot.docs].forEach((document) => {
+      documents.set(document.id, document);
+    });
+  }
+
+  const accessPriority = { owner: 0, admin: 1, platformAdmin: 2 } as const;
+  const stores = [...documents.values()]
+    .map((document) => managedStoreFields(document.id, document.data(), userId))
+    .filter((store) => Boolean(store.slug))
+    .sort((first, second) => {
+      const accessDifference = accessPriority[first.accessRole] - accessPriority[second.accessRole];
+      return accessDifference || first.name.localeCompare(second.name, "pt-BR");
+    });
+
+  return { stores };
+});
+
+export const listPlatformUsers = onCall(async (request) => {
+  assertPlatformAdmin(request.auth);
+  const users: Array<{ uid: string; email: string; displayName: string; disabled: boolean }> = [];
+  let pageToken: string | undefined;
+
+  do {
+    const result = await admin.auth().listUsers(1000, pageToken);
+    users.push(
+      ...result.users.map((user) => ({
+        uid: user.uid,
+        email: user.email || "",
+        displayName: user.displayName || "",
+        disabled: user.disabled,
+      })),
+    );
+    pageToken = result.pageToken;
+  } while (pageToken);
+
+  users.sort((first, second) =>
+    (first.displayName || first.email || first.uid).localeCompare(
+      second.displayName || second.email || second.uid,
+      "pt-BR",
+    ),
+  );
+
+  return { users };
+});
+
+export const createPlatformUser = onCall(async (request) => {
+  assertPlatformAdmin(request.auth);
+  const payload = createPlatformUserSchema.parse(request.data);
+  let user: admin.auth.UserRecord;
+  let isNewUser = false;
+
+  try {
+    user = await admin.auth().getUserByEmail(payload.email);
+  } catch (caughtError) {
+    if ((caughtError as { code?: string }).code !== "auth/user-not-found") {
+      throw caughtError;
+    }
+
+    user = await admin.auth().createUser({
+      email: payload.email,
+      displayName: payload.displayName,
+      emailVerified: false,
+      disabled: false,
+    });
+    isNewUser = true;
+  }
+
+  if (user.disabled) {
+    throw new HttpsError("failed-precondition", "Essa conta existe, mas está desativada no Firebase Auth.");
+  }
+
+  return {
+    user: {
+      uid: user.uid,
+      email: user.email || payload.email,
+      displayName: user.displayName || payload.displayName,
+      disabled: user.disabled,
+    },
+    isNewUser,
+  };
+});
+
 export const createStore = onCall(async (request) => {
   assertPlatformAdmin(request.auth);
   const payload = createStoreSchema.parse(request.data);
+  await assertKnownUsers([...payload.owners, ...payload.adminUsers]);
+
+  const duplicateSlugSnapshot = await db.collection("stores").where("slug", "==", payload.slug).limit(1).get();
+
+  if (!duplicateSlugSnapshot.empty) {
+    throw new HttpsError("already-exists", "Já existe um restaurante usando este slug.");
+  }
+
   const now = new Date().toISOString();
   const storeRef = db.collection("stores").doc();
+  const slugReservationRef = db.collection("storeSlugs").doc(payload.slug);
+  const themeRef = storeRef.collection("theme").doc("default");
+  const publicBaseUrl = payload.publicBaseUrl?.replace(/\/$/u, "");
 
-  await storeRef.set({
+  const store = {
     name: payload.name,
     slug: payload.slug,
     description: payload.description,
+    phone: payload.phone,
+    address: payload.address,
+    openingHours: payload.openingHours,
     owners: payload.owners,
-    adminUsers: payload.adminUsers,
-    isActive: true,
-    isAcceptingOrders: true,
+    adminUsers: payload.adminUsers.filter((uid) => !payload.owners.includes(uid)),
+    isActive: payload.isActive,
+    isAcceptingOrders: payload.isActive && payload.isAcceptingOrders,
     pausedMessage: "Pedidos online pausados no momento.",
-    estimatedPrepMinutes: 20,
+    estimatedPrepMinutes: payload.estimatedPrepMinutes,
     createdAt: now,
     updatedAt: now,
+  };
+
+  await db.runTransaction(async (transaction) => {
+    const reservationSnapshot = await transaction.get(slugReservationRef);
+
+    if (reservationSnapshot.exists) {
+      throw new HttpsError("already-exists", "Já existe um restaurante usando este slug.");
+    }
+
+    transaction.set(slugReservationRef, {
+      storeId: storeRef.id,
+      slug: payload.slug,
+      createdAt: now,
+    });
+    transaction.set(storeRef, removeUndefined(store));
+    transaction.set(themeRef, {
+      id: "default",
+      storeId: storeRef.id,
+      primaryColor: "#8a1020",
+      secondaryColor: "#1b7f79",
+      accentColor: "#f2b84b",
+      backgroundColor: "#f8f4ed",
+      surfaceColor: "#fffdf8",
+      textColor: "#261f1c",
+      mutedTextColor: "#685d56",
+      borderColor: "#e6ded2",
+      fontFamily: "var(--font-geist-sans)",
+      borderRadius: 8,
+      logoUrl: "/placeholder-logo.svg",
+      bannerUrl: "/placeholder-banner.svg",
+      visualStyle: "warm-quick-service",
+      updatedAt: now,
+    });
+
+    if (payload.createStarterData) {
+      transaction.set(storeRef.collection("tables").doc("balcao"), removeUndefined({
+        id: "balcao",
+        label: "Balcão",
+        code: "BALCAO",
+        qrCodeUrl: publicBaseUrl ? `${publicBaseUrl}/loja/${payload.slug}/mesa/balcao` : undefined,
+        isActive: true,
+        createdAt: now,
+      }));
+      transaction.set(storeRef.collection("categories").doc("pratos"), {
+        id: "pratos",
+        storeId: storeRef.id,
+        name: "Pratos",
+        order: 1,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      transaction.set(storeRef.collection("categories").doc("bebidas"), {
+        id: "bebidas",
+        storeId: storeRef.id,
+        name: "Bebidas",
+        order: 2,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
   });
 
-  return { id: storeRef.id };
+  return { store: platformStoreFields(storeRef.id, store) };
+});
+
+export const updatePlatformStore = onCall(async (request) => {
+  assertPlatformAdmin(request.auth);
+  const payload = updatePlatformStoreSchema.parse(request.data);
+  await assertKnownUsers([...payload.owners, ...payload.adminUsers]);
+
+  const storeRef = db.collection("stores").doc(payload.storeId);
+  const storeSnapshot = await storeRef.get();
+
+  if (!storeSnapshot.exists) {
+    throw new HttpsError("not-found", "Restaurante não encontrado.");
+  }
+
+  const updatedAt = new Date().toISOString();
+  const update = removeUndefined({
+    name: payload.name,
+    description: payload.description,
+    phone: payload.phone,
+    address: payload.address,
+    openingHours: payload.openingHours,
+    owners: payload.owners,
+    adminUsers: payload.adminUsers.filter((uid) => !payload.owners.includes(uid)),
+    isActive: payload.isActive,
+    isAcceptingOrders: payload.isActive && payload.isAcceptingOrders,
+    estimatedPrepMinutes: payload.estimatedPrepMinutes,
+    updatedAt,
+  });
+
+  await storeRef.set(update, { merge: true });
+  return {
+    store: platformStoreFields(payload.storeId, {
+      ...storeSnapshot.data(),
+      ...update,
+    }),
+  };
 });
 
 export const getAdminStoreBundle = onCall(async (request) => {
@@ -447,6 +789,24 @@ interface CreateOrderOptions {
   initialStatus?: "received" | "accepted";
 }
 
+interface OrderPreconditionDetails {
+  reason: string;
+  itemId?: string;
+  itemName?: string;
+  groupId?: string;
+  groupName?: string;
+  choiceId?: string;
+  choiceName?: string;
+  previousPrice?: number;
+  currentPrice?: number;
+}
+
+const orderPreconditionError = (userMessage: string, details: OrderPreconditionDetails) =>
+  new HttpsError("failed-precondition", userMessage, {
+    ...details,
+    userMessage,
+  });
+
 const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, options: CreateOrderOptions = {}) => {
   const storeRef = db.doc(`stores/${payload.storeId}`);
   const orderRef = storeRef.collection("orders").doc();
@@ -459,21 +819,22 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
     const store = storeSnapshot.data() as StoreAvailability | undefined;
 
     if (!store?.isActive) {
-      throw new HttpsError("failed-precondition", "Loja indisponível para pedidos online.");
+      throw orderPreconditionError("Esta loja não está disponível para pedidos online.", {
+        reason: "store_unavailable",
+      });
     }
 
     if (!options.allowPausedStore) {
       if (!store.isAcceptingOrders) {
-        throw new HttpsError(
-          "failed-precondition",
-          store.pausedMessage || "A loja está fechada no momento.",
-        );
+        throw orderPreconditionError(store.pausedMessage || "A loja está fechada no momento.", {
+          reason: "store_paused",
+        });
       }
 
       if (!isWithinOpeningHours(store.openingHours, nowDate)) {
-        throw new HttpsError(
-          "failed-precondition",
+        throw orderPreconditionError(
           "A loja está fechada no momento. Tente novamente dentro do horário de funcionamento.",
+          { reason: "store_closed" },
         );
       }
     }
@@ -486,7 +847,9 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
       const table = tableSnapshot.data() as TableAvailability | undefined;
 
       if (!tableSnapshot.exists || !table?.isActive) {
-        throw new HttpsError("failed-precondition", "Mesa não encontrada ou inativa.");
+        throw orderPreconditionError("Esta mesa não está mais disponível para receber pedidos.", {
+          reason: "table_unavailable",
+        });
       }
 
       tableId = tableSnapshot.id;
@@ -496,7 +859,9 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
     const customerName = tableLabel || payload.customerName?.trim();
 
     if (!customerName || customerName.length < 2) {
-      throw new HttpsError("failed-precondition", "Informe seu nome para identificar o pedido.");
+      throw orderPreconditionError("Informe seu nome para identificar o pedido.", {
+        reason: "customer_name_required",
+      });
     }
 
     const officialItems = [];
@@ -508,21 +873,112 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
         | undefined;
 
       if (!officialItem?.isAvailable) {
-        throw new HttpsError("failed-precondition", `Item ${item.menuItemId} indisponível.`);
+        const itemName = officialItem?.name?.trim();
+        const userMessage = itemName
+          ? `O item ${itemName} não está mais disponível. Remova-o do carrinho para continuar.`
+          : "Um item do seu pedido não está mais disponível. Remova-o do carrinho para continuar.";
+
+        throw orderPreconditionError(userMessage, {
+          reason: "item_unavailable",
+          itemId: item.menuItemId,
+          itemName,
+        });
       }
 
+      const officialUnitPrice = Number(officialItem.price);
+
+      if (
+        item.expectedUnitPrice !== undefined
+        && Math.round(item.expectedUnitPrice * 100) !== Math.round(officialUnitPrice * 100)
+      ) {
+        throw orderPreconditionError(`O preço de ${officialItem.name} foi atualizado.`, {
+          reason: "item_price_changed",
+          itemId: item.menuItemId,
+          itemName: officialItem.name,
+          previousPrice: item.expectedUnitPrice,
+          currentPrice: officialUnitPrice,
+        });
+      }
+
+      const selectedOptionKeys = new Set<string>();
       const selectedOptions = item.selectedOptions.map((selectedOption) => {
         const group = officialItem.optionsGroups.find((candidate) => candidate.id === selectedOption.groupId);
 
         if (!group) {
-          throw new HttpsError("failed-precondition", `Grupo ${selectedOption.groupId} inválido.`);
+          throw orderPreconditionError(
+            `As opções de ${officialItem.name} foram atualizadas. Revise esse item antes de continuar.`,
+            {
+              reason: "options_group_changed",
+              itemId: item.menuItemId,
+              itemName: officialItem.name,
+              groupId: selectedOption.groupId,
+            },
+          );
         }
 
         const choice = group.choices.find((candidate) => candidate.id === selectedOption.choiceId);
 
-        if (!choice || !choice.isAvailable) {
-          throw new HttpsError("failed-precondition", `Adicional ${selectedOption.choiceId} indisponível.`);
+        if (!choice) {
+          throw orderPreconditionError(
+            `Um adicional de ${officialItem.name} não está mais disponível. Revise esse item antes de continuar.`,
+            {
+              reason: "additional_removed",
+              itemId: item.menuItemId,
+              itemName: officialItem.name,
+              groupId: group.id,
+              choiceId: selectedOption.choiceId,
+            },
+          );
         }
+
+        if (!choice.isAvailable) {
+          throw orderPreconditionError(`O adicional ${choice.name} não está mais disponível.`, {
+            reason: "additional_unavailable",
+            itemId: item.menuItemId,
+            itemName: officialItem.name,
+            groupId: group.id,
+            choiceId: choice.id,
+            choiceName: choice.name,
+          });
+        }
+
+        const officialChoicePrice = Number(choice.price);
+
+        if (
+          selectedOption.expectedPrice !== undefined
+          && Math.round(selectedOption.expectedPrice * 100) !== Math.round(officialChoicePrice * 100)
+        ) {
+          throw orderPreconditionError(`O preço do adicional ${choice.name} foi atualizado.`, {
+            reason: "additional_price_changed",
+            itemId: item.menuItemId,
+            itemName: officialItem.name,
+            groupId: group.id,
+            groupName: group.name,
+            choiceId: choice.id,
+            choiceName: choice.name,
+            previousPrice: selectedOption.expectedPrice,
+            currentPrice: officialChoicePrice,
+          });
+        }
+
+        const selectedOptionKey = `${group.id}:${choice.id}`;
+
+        if (selectedOptionKeys.has(selectedOptionKey)) {
+          throw orderPreconditionError(
+            `O adicional ${choice.name} está duplicado em ${officialItem.name}. Revise esse item antes de continuar.`,
+            {
+              reason: "options_invalid",
+              itemId: item.menuItemId,
+              itemName: officialItem.name,
+              groupId: group.id,
+              groupName: group.name,
+              choiceId: choice.id,
+              choiceName: choice.name,
+            },
+          );
+        }
+
+        selectedOptionKeys.add(selectedOptionKey);
 
         return {
           groupId: group.id,
@@ -533,7 +989,43 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
         };
       });
 
-      const unitPrice = Number(officialItem.price);
+      for (const group of officialItem.optionsGroups) {
+        const selectedCount = selectedOptions.filter((option) => option.groupId === group.id).length;
+        const minimumRequired = Math.max(Number(group.minSelected) || 0, group.isRequired ? 1 : 0);
+        const maximumAllowed = Math.max(0, Number(group.maxSelected) || 0);
+
+        if (selectedCount < minimumRequired) {
+          const selectionLabel = minimumRequired === 1 ? "uma opção" : `${minimumRequired} opções`;
+
+          throw orderPreconditionError(
+            `${officialItem.name} precisa de ${selectionLabel} em ${group.name}. Personalize o item novamente.`,
+            {
+              reason: "required_options_missing",
+              itemId: item.menuItemId,
+              itemName: officialItem.name,
+              groupId: group.id,
+              groupName: group.name,
+            },
+          );
+        }
+
+        if (selectedCount > maximumAllowed) {
+          const selectionLabel = maximumAllowed === 1 ? "uma opção" : `${maximumAllowed} opções`;
+
+          throw orderPreconditionError(
+            `${officialItem.name} permite no máximo ${selectionLabel} em ${group.name}. Personalize o item novamente.`,
+            {
+              reason: "options_limit_exceeded",
+              itemId: item.menuItemId,
+              itemName: officialItem.name,
+              groupId: group.id,
+              groupName: group.name,
+            },
+          );
+        }
+      }
+
+      const unitPrice = officialUnitPrice;
       const optionsTotal = selectedOptions.reduce((total, option) => total + option.price, 0);
 
       officialItems.push({
@@ -589,15 +1081,48 @@ const createOrderRecord = async (payload: z.infer<typeof createOrderSchema>, opt
   return order;
 };
 
+const createOrderWithDiagnostics = async (
+  payload: z.infer<typeof createOrderSchema>,
+  options: CreateOrderOptions = {},
+) => {
+  try {
+    return await createOrderRecord(payload, options);
+  } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+
+    const supportCode = randomUUID().slice(0, 8).toUpperCase();
+    const serializedError = error instanceof Error
+      ? { name: error.name, message: error.message, stack: error.stack }
+      : { message: String(error) };
+
+    logError("Falha inesperada ao registrar pedido.", {
+      supportCode,
+      storeId: payload.storeId,
+      tableId: payload.tableId || null,
+      itemIds: payload.items.map((item) => item.menuItemId),
+      unitsCount: payload.items.reduce((total, item) => total + item.quantity, 0),
+      error: serializedError,
+    });
+
+    throw new HttpsError(
+      "internal",
+      "Não foi possível registrar o pedido. Tente novamente e, se o problema continuar, informe o código de suporte.",
+      { supportCode },
+    );
+  }
+};
+
 export const createOrder = onCall(async (request) => {
-  const payload = createOrderSchema.parse(request.data);
-  return createOrderRecord(payload);
+  const payload = parseCreateOrderPayload(request.data);
+  return createOrderWithDiagnostics(payload);
 });
 
 export const createAdminOrder = onCall(async (request) => {
-  const payload = createOrderSchema.parse(request.data);
+  const payload = parseCreateOrderPayload(request.data);
   await assertStoreAdmin(payload.storeId, request.auth);
-  return createOrderRecord(payload, { allowPausedStore: true, initialStatus: "accepted" });
+  return createOrderWithDiagnostics(payload, { allowPausedStore: true, initialStatus: "accepted" });
 });
 
 export const updateOrderStatus = onCall(async (request) => {

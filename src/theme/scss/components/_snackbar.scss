@@ -16,7 +16,13 @@
   color: var(--color-text);
   background: var(--color-surface-strong);
   box-shadow: var(--shadow-soft);
-  animation: snackbar-enter var(--duration-normal) var(--ease-standard);
+  animation: snackbar-enter-from-bottom var(--duration-normal) var(--ease-standard);
+
+  &--top {
+    top: calc(env(safe-area-inset-top, 0px) + var(--space-4));
+    bottom: auto;
+    animation-name: snackbar-enter-from-top;
+  }
 
   &__icon {
     color: var(--color-success);
@@ -65,10 +71,22 @@
   }
 }
 
-@keyframes snackbar-enter {
+@keyframes snackbar-enter-from-bottom {
   from {
     opacity: 0;
     transform: translateY(var(--space-3));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes snackbar-enter-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--space-3) * -1));
   }
 
   to {

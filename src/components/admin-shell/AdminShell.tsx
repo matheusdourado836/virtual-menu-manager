@@ -40,7 +40,8 @@ import { canManageStore } from "@/lib/permissions/store-permissions";
 import { getAdminStoreBundleBySlug, getStoreBundleBySlug, subscribeStoreOrders } from "@/lib/services/store-service";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatCurrency } from "@/lib/utils/money";
-import type { Order, StoreBundle, StoreTheme } from "@/types/menu";
+import { fallbackAdminTheme } from "@/theme/admin-theme";
+import type { Order, StoreBundle } from "@/types/menu";
 import "./admin-shell.scss";
 
 type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "feedbacks" | "settings";
@@ -72,27 +73,10 @@ const tabDescriptions: Record<AdminTab, string> = {
   orders: "Acompanhe a operação em tempo real.",
   history: "Consulte todos os pedidos registrados.",
   tables: "Organize os pontos de atendimento e QR Codes.",
-  menu: "Gerencie categorias, itens e disponibilidade.",
+  menu: "Gerencie categorias, itens, adicionais e disponibilidade.",
   finance: "Veja faturamento, produtos vendidos e pagamentos.",
   feedbacks: "Acompanhe avaliações internas dos clientes.",
   settings: "Edite dados da loja, operação e identidade visual.",
-};
-
-const fallbackAdminTheme: StoreTheme = {
-  id: "fallback",
-  storeId: "fallback",
-  primaryColor: "#181818",
-  secondaryColor: "#f5f5f2",
-  accentColor: "#2f8f6f",
-  backgroundColor: "#f7f5f0",
-  surfaceColor: "#fffdf8",
-  textColor: "#211f1d",
-  mutedTextColor: "#6f6962",
-  borderColor: "#e8e1d7",
-  fontFamily: "var(--font-geist-sans)",
-  borderRadius: 14,
-  visualStyle: "neutral-admin",
-  updatedAt: new Date(0).toISOString(),
 };
 
 interface AdminShellProps {
@@ -680,6 +664,7 @@ export function AdminShell({ slug }: AdminShellProps) {
         {feedback ? (
           <Snackbar
             message={feedback.message}
+            placement="top"
             variant={feedback.variant}
             onDismiss={() => setFeedback(null)}
           />

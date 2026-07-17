@@ -12,12 +12,13 @@ MVP de pedidos por QR Code para foodtrucks/restaurantes pequenos, com cardápio 
 
 ## Rotas
 
-- `/loja/cafe-carioca`: cardápio público.
-- `/loja/cafe-carioca/mesa/mesa-01`: cardápio já vinculado a uma mesa.
-- `/loja/cafe-carioca/carrinho`: carrinho para retirada no balcão.
-- `/loja/cafe-carioca/mesa/mesa-01/carrinho`: carrinho vinculado a uma mesa.
+- `/loja/[slug]`: cardápio público de um restaurante.
+- `/loja/[slug]/mesa/[tableId]`: cardápio vinculado a uma mesa.
+- `/loja/[slug]/carrinho`: carrinho para retirada no balcão.
+- `/loja/[slug]/mesa/[tableId]/carrinho`: carrinho vinculado a uma mesa.
 - `/pedido/[orderId]`: acompanhamento do pedido.
-- `/admin`: painel administrativo da loja seed.
+- `/admin`: entrada do painel administrativo.
+- `/admin/[slug]`: painel operacional de qualquer restaurante pelo slug.
 
 ## Rodando localmente
 
@@ -29,12 +30,37 @@ npm run dev
 
 Abra `http://localhost:3000`. A aplicação inicializa diretamente no login administrativo e exige as variáveis Firebase preenchidas.
 
+## Sentry
+
+O monitoramento é inicializado no navegador, servidor Node.js e runtime Edge.
+Para receber eventos, configure `NEXT_PUBLIC_SENTRY_DSN` e `SENTRY_DSN` no
+ambiente local e no ambiente publicado.
+
+Para gerar releases e enviar source maps legíveis durante o build de produção,
+configure também estas variáveis no provedor de deploy:
+
+```bash
+SENTRY_ORG=slug-da-organizacao
+SENTRY_PROJECT=slug-do-projeto
+SENTRY_AUTH_TOKEN=token-da-integracao
+```
+
+O token é secreto e não deve ser salvo no repositório. Em desenvolvimento,
+acesse `http://localhost:3000/sentry-test` para enviar um evento controlado. Em
+produção, essa rota retorna 404, exceto quando `SENTRY_TEST_ENABLED=true` estiver
+configurado no momento do build.
+
+Falhas ao finalizar pedidos são registradas com código Firebase, loja, modo do
+pedido e IDs dos itens, sem enviar nome, telefone ou observações do cliente. Em
+falhas inesperadas, a mensagem mostra um código de suporte que também aparece no
+Sentry e no log estruturado da Function `createOrder`.
+
 ## Firebase real
 
 1. Crie um projeto Firebase com Auth, Firestore, Storage e Functions.
 2. Habilite Email/Senha e Google Sign-In no Firebase Auth.
 3. Copie os dados do Web App para `.env.local`.
-4. Defina o usuário dono no Firebase Auth. O seed usa `SEED_OWNER_EMAIL` ou `cafecarioca@gmail.com` por padrão.
+4. Crie os usuários responsáveis no Firebase Auth e vincule-os às lojas pelo painel global.
 5. Aplique rules e indexes:
 
 ```bash
@@ -51,11 +77,65 @@ npm run build
 firebase deploy --only functions
 ```
 
-7. Rode o seed:
+7. Crie e vincule as lojas pelo `restaurant-admin`. Se precisar de dados de
+   demonstração, use os scripts genéricos de cardápio informando o slug da loja.
+
+## Restaurant Admin local
+
+O painel global fica no projeto separado `../restaurant-admin` e roda somente em
+localhost, seguindo o mesmo modelo do `clinic-admin`. Ele é restrito a usuários
+com a custom claim `platformAdmin: true` e permite:
+
+- listar restaurantes ativos, inativos, recebendo pedidos ou pausados;
+- criar uma loja isolada com tema padrão, Balcão e categorias iniciais opcionais;
+- definir proprietários e administradores usando contas do Firebase Auth;
+- criar uma conta de acesso e enviar o e-mail para definição de senha;
+- editar dados, disponibilidade e acessos;
+- abrir o cardápio público ou o painel operacional da loja selecionada.
+
+Para conceder o primeiro acesso global, baixe uma chave JSON em **Firebase
+Console › Configurações do projeto › Contas de serviço › Gerar nova chave
+privada**. Salve a chave fora do repositório e execute:
 
 ```bash
-npm run seed
+npm run platform-admin:grant -- seu-email@exemplo.com "/caminho/para/service-account.json"
 ```
+
+Depois, saia e entre novamente para renovar o token. As Functions usadas pelo
+painel local precisam existir no projeto Firebase:
+
+```bash
+cd functions
+npm run build
+firebase deploy --only functions:listPlatformStores,functions:listPlatformUsers,functions:listManagedStores,functions:createPlatformUser,functions:createStore,functions:updatePlatformStore
+```
+
+Para iniciar o painel local:
+
+```bash
+cd ../restaurant-admin
+npm install
+npm run dev
+```
+
+O painel global não copia pedidos, avaliações, contadores ou clientes entre lojas.
+
+### Cardápio de demonstração
+
+Para visualizar e depois criar 8 pratos, 8 bebidas e 24 adicionais em uma loja de teste:
+
+```bash
+npm run menu:seed -- slug-do-restaurante "/caminho/para/service-account.json"
+npm run menu:seed -- slug-do-restaurante "/caminho/para/service-account.json" --apply
+npm run menu:assign-additionals -- slug-do-restaurante "/caminho/para/service-account.json"
+npm run menu:assign-additionals -- slug-do-restaurante "/caminho/para/service-account.json" --apply
+```
+
+Os comandos sem `--apply` são apenas uma prévia. Com `--apply`, o seed cria
+somente documentos demo que ainda não existem, e a associação preserva itens
+que já possuem opções. Use `--overwrite` junto de `--apply` apenas quando quiser
+substituir documentos demo existentes. Os adicionais ficam disponíveis no painel
+para serem associados aos itens compatíveis.
 
 ## Emuladores
 
@@ -64,40 +144,6 @@ npm run emulators
 ```
 
 O Firebase CLI precisa estar instalado globalmente ou via `npx firebase`.
-
-## Dados extraídos da imagem
-
-Loja seed: **Café Carioca**.
-
-Categorias:
-
-- Lanches
-- Bebidas
-
-Itens extraídos:
-
-- Cuscuz com calabresa: R$ 7,00
-- Cuscuz com carne de sol: R$ 15,00
-- Tapioca na manteiga: R$ 7,00
-- Omelete: R$ 15,00
-- Pão na chapa: R$ 7,00, com manteiga
-- Misto quente: R$ 10,00, queijo e presunto
-- Misto completo: R$ 12,00, queijo, presunto e ovo
-- Pão de queijo 90g: R$ 4,00, unidade
-- Sanduíche Natural 300g: R$ 10,00, com maionese defumada
-- Salgado: R$ 7,00, `TODO_REVIEW` sabores
-- Bolo ft: R$ 6,00, milho e formigueiro, `TODO_REVIEW` confirmar nome
-- Empada: R$ 7,00, `TODO_REVIEW` sabores
-- Suco - polpa 200ml: R$ 6,00, `TODO_REVIEW` sabores
-- Suco - polpa 300ml: R$ 7,00, `TODO_REVIEW` sabores
-- Café pequeno: R$ 2,00
-- Café com leite pequeno: R$ 2,00
-- Café grande: R$ 4,00
-- Café com leite grande: R$ 4,00
-- Água: R$ 4,00
-- Água com gás: R$ 5,00
-
-Adicionais extraídos: Mussarela, Requeijão, Presunto, Calabresa, Bacon, Ovo, Carne de sol, Frango Cremoso, Tomate e Cebola. Todos foram cadastrados como R$ 2,00.
 
 ## Segurança
 
@@ -121,12 +167,12 @@ npm run build
 npm run lint
 npm run typecheck
 npm run test:e2e
-npm run seed
+npm run menu:seed -- slug-do-restaurante "/caminho/para/service-account.json"
+npm run menu:assign-additionals -- slug-do-restaurante "/caminho/para/service-account.json"
 ```
 
 ## TODOs principais
 
-- `TODO_CONFIG`: inserir base URL pública e revisar credenciais de deploy/seed quando necessário.
-- `TODO_REVIEW`: revisar sabores de salgados, empadas e sucos; confirmar o nome `Bolo ft`.
+- `TODO_CONFIG`: inserir base URL pública e revisar credenciais de deploy quando necessário.
 - `TODO_SECURITY`: endurecer acompanhamento público com token de rastreio antes de produção.
 - Persistir edições do painel de mesas/cardápio/tema via Functions específicas.

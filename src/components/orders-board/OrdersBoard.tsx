@@ -475,10 +475,10 @@ export function OrdersBoard({
                 <div className="orders-board__cell orders-board__cell--items">
                   <span className="orders-board__mobile-label">Itens</span>
                   <div className="orders-board__items">
-                    {order.items.slice(0, 3).map((item) => (
+                    {order.items.slice(0, 3).map((item, itemIndex) => (
                       <p
                         className="orders-board__item-line"
-                        key={`${order.id}-${item.menuItemId}`}
+                        key={`${order.id}-${item.menuItemId}-${itemIndex}`}
                       >
                         <strong className="orders-board__item-quantity">
                           {item.quantity}x
