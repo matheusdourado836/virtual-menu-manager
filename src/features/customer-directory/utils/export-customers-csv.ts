@@ -1,7 +1,6 @@
 import type { CustomerDirectoryItem } from "@/features/customer-directory/types/customer-directory.types";
+import { escapeCsvCell } from "@/lib/utils/csv";
 import { formatDateTime } from "@/lib/utils/dates";
-
-const escapeCsv = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 
 export const downloadCustomersCsv = (customers: CustomerDirectoryItem[], filename: string) => {
   const header = [
@@ -22,8 +21,8 @@ export const downloadCustomersCsv = (customers: CustomerDirectoryItem[], filenam
     formatDateTime(customer.lastOrderAt),
     customer.lastOrderCode,
   ]);
-  const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(";")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(";")).join("\n");
+  const blob = new Blob([String.fromCharCode(0xfeff) + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
 

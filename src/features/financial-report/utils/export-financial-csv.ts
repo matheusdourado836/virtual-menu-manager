@@ -1,3 +1,4 @@
+import { escapeCsvCell } from "@/lib/utils/csv";
 import { formatDateTime } from "@/lib/utils/dates";
 import { formatCurrency } from "@/lib/utils/money";
 import { getPaymentMethodLabel, getPaymentStatusLabel } from "@/lib/utils/payment";
@@ -11,8 +12,6 @@ const statusLabels: Record<OrderStatus, string> = {
   delivered: "Finalizado",
   cancelled: "Cancelado",
 };
-
-const escapeCsv = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 
 const summarizeItems = (order: Order) =>
   order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ");
@@ -64,8 +63,8 @@ export const downloadFinancialCsv = (orders: Order[], filename: string) => {
     order.cancelReason ?? "",
   ]);
 
-  const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(";")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(";")).join("\n");
+  const blob = new Blob([String.fromCharCode(0xfeff) + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
