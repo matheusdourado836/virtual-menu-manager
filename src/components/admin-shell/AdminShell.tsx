@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   Clock3,
   Coffee,
+  ContactRound,
   History,
   LayoutDashboard,
   Loader2,
@@ -35,6 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
 import { FinancialReport } from "@/features/financial-report/components/financial-report/FinancialReport";
+import { CustomerDirectory } from "@/features/customer-directory/components/customer-directory/CustomerDirectory";
 import { firebaseAuth, googleProvider } from "@/lib/firebase/client";
 import { canManageStore } from "@/lib/permissions/store-permissions";
 import { getAdminStoreBundleBySlug, getStoreBundleBySlug, subscribeStoreOrders } from "@/lib/services/store-service";
@@ -44,7 +46,7 @@ import { fallbackAdminTheme } from "@/theme/admin-theme";
 import type { Order, StoreBundle } from "@/types/menu";
 import "./admin-shell.scss";
 
-type AdminTab = "orders" | "history" | "tables" | "menu" | "finance" | "feedbacks" | "settings";
+type AdminTab = "orders" | "history" | "customers" | "tables" | "menu" | "finance" | "feedbacks" | "settings";
 type DashboardMetricTarget = OrderGroup | "finance";
 
 interface DashboardMetric {
@@ -62,6 +64,7 @@ const adminTabs: Array<{
 }> = [
   { id: "orders", label: "Pedidos", icon: LayoutDashboard },
   { id: "history", label: "Histórico", icon: History },
+  { id: "customers", label: "Clientes", icon: ContactRound },
   { id: "tables", label: "Mesas", icon: QrCode },
   { id: "menu", label: "Cardápio", icon: Utensils },
   { id: "finance", label: "Financeiro", icon: CircleDollarSign },
@@ -72,6 +75,7 @@ const adminTabs: Array<{
 const tabDescriptions: Record<AdminTab, string> = {
   orders: "Acompanhe a operação em tempo real.",
   history: "Consulte todos os pedidos registrados.",
+  customers: "Consulte clientes identificados pelo telefone e exporte a lista.",
   tables: "Organize os pontos de atendimento e QR Codes.",
   menu: "Gerencie categorias, itens, adicionais e disponibilidade.",
   finance: "Veja faturamento, produtos vendidos e pagamentos.",
@@ -595,6 +599,7 @@ export function AdminShell({ slug }: AdminShellProps) {
                 onFeedback={showFeedback}
               />
             ) : null}
+            {activeTab === "customers" ? <CustomerDirectory orders={orders} /> : null}
             {activeTab === "tables" ? (
               <TablesManager
                 storeId={bundle.store.id}
