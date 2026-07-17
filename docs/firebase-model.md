@@ -87,12 +87,21 @@ stores/{storeId}/orders/{orderId}
   deliveredAt
   cancelledAt
 
+// A lista de clientes do painel é derivada destes pedidos.
+// O telefone brasileiro normalizado é a única chave de identidade;
+// pedidos sem telefone não são associados por nome.
+
 stores/{storeId}/counters/orders
   nextCode
 
 orderLookup/{orderId}
   storeId
   orderId
+  createdAt
+
+storeSlugs/{slug}
+  storeId
+  slug
   createdAt
 ```
 
@@ -101,4 +110,5 @@ orderLookup/{orderId}
 - `stores/{storeId}/orders` é subcoleção para isolamento por loja.
 - `orderLookup` existe para a rota `/pedido/[orderId]` localizar a loja sem expor listagem de pedidos.
 - `counters/orders` é privado e só alterado por Cloud Functions.
+- `storeSlugs` reserva slugs durante a criação administrativa e evita duplicidade concorrente.
 - `optionsGroups` foi mantido dentro do item para simplificar o MVP; se houver muitos adicionais globais, pode virar subcoleção.

@@ -49,7 +49,7 @@
 
 - In-app browser: public menu and item dialog passed responsive interaction and visual checks.
 - In-app browser latest pass: public menu rendered at `390 x 844` with real store data and long scroll content.
-- In-app browser latest pass after Firebase loading fix: `/admin` rendered the login form and `/loja/cafe-carioca/mesa/mesa-01` rendered the public menu on the current dev server.
+- In-app browser latest pass after Firebase loading fix: `/admin` rendered the login form and a route `/loja/[slug]/mesa/[tableId]` rendered the public menu on the current dev server.
 - Lint passed.
 - Typecheck passed.
 - Next.js production build passed.

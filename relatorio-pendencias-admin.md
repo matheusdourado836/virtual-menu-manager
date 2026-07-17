@@ -96,7 +96,7 @@ Após a investigação do loading em Firestore, foi adicionada a Function autent
 - `npm --prefix functions run build`: passou.
 - `npm run build`: passou.
 - `npm run test:e2e`: passou com 3 testes OK e 1 teste pulado por ausência de `E2E_ADMIN_EMAIL` e `E2E_ADMIN_PASSWORD`.
-- Browser integrado em `http://localhost:3001/loja/cafe-carioca/mesa/mesa-01`: renderizou o cardápio público no viewport `390 x 844`, com lista longa e dados reais.
+- Browser integrado em uma rota `http://localhost:3001/loja/[slug]/mesa/[tableId]`: renderizou o cardápio público no viewport `390 x 844`, com lista longa e dados reais.
 - Browser integrado em `http://localhost:3001/admin`: renderizou a tela de login do painel.
 
 ## 12. Riscos ou pontos pendentes
