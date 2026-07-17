@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertTriangle, Loader2, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useFocusTrap } from "@/components/ui/dialog/use-focus-trap";
 import "./confirm-dialog.scss";
 
 interface ConfirmDialogProps {
@@ -25,6 +26,9 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef);
+
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isLoading) {
@@ -39,6 +43,7 @@ export function ConfirmDialog({
   return (
     <div className="confirm-dialog" role="presentation" onMouseDown={isLoading ? undefined : onCancel}>
       <section
+        ref={panelRef}
         className="confirm-dialog__panel"
         role="dialog"
         aria-modal="true"

@@ -1,16 +1,14 @@
 "use client";
 
-import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import {
   BellRing,
   CheckCheck,
   CircleDollarSign,
   Clock3,
-  Coffee,
   ContactRound,
   History,
   LayoutDashboard,
-  Loader2,
   LogOut,
   MessageSquareText,
   Palette,
@@ -23,7 +21,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminLoginForm } from "@/components/admin-login-form/AdminLoginForm";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
 import { FeedbacksManager } from "@/components/feedbacks-manager/FeedbacksManager";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
@@ -37,8 +36,9 @@ import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
 import { FinancialReport } from "@/features/financial-report/components/financial-report/FinancialReport";
 import { CustomerDirectory } from "@/features/customer-directory/components/customer-directory/CustomerDirectory";
-import { firebaseAuth, googleProvider } from "@/lib/firebase/client";
+import { firebaseAuth } from "@/lib/firebase/client";
 import { canManageStore } from "@/lib/permissions/store-permissions";
+import { getFriendlyErrorMessage } from "@/lib/errors/friendly-error";
 import { getAdminStoreBundleBySlug, getStoreBundleBySlug, subscribeStoreOrders } from "@/lib/services/store-service";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatCurrency } from "@/lib/utils/money";
@@ -95,10 +95,6 @@ export function AdminShell({ slug }: AdminShellProps) {
   const [user, setUser] = useState<User | null>(null);
   const [claims, setClaims] = useState<Record<string, unknown>>({});
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authLoading, setAuthLoading] = useState<"email" | "google" | null>(null);
   const [loadError, setLoadError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -179,7 +175,7 @@ export function AdminShell({ slug }: AdminShellProps) {
         }
 
         setBundle(null);
-        setLoadError(error instanceof Error ? error.message : "Não foi possível carregar a loja.");
+        setLoadError(getFriendlyErrorMessage(error, "Não foi possível carregar a loja."));
       })
       .finally(() => {
         if (isMounted) {
@@ -210,47 +206,11 @@ export function AdminShell({ slug }: AdminShellProps) {
 
     return subscribeStoreOrders(bundle.store.id, handleOrdersChange, (error) => {
       setFeedback({
-        message: error.message || "Não foi possível acompanhar os pedidos.",
+        message: getFriendlyErrorMessage(error, "Não foi possível acompanhar os pedidos."),
         variant: "error",
       });
     });
   }, [bundle, handleOrdersChange, isAuthorized, user]);
-
-  const submitEmailLogin = async (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
-
-    if (authLoading) {
-      return;
-    }
-
-    setAuthError("");
-    setAuthLoading("email");
-
-    try {
-      await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Falha no login.");
-    } finally {
-      setAuthLoading(null);
-    }
-  };
-
-  const submitGoogleLogin = async () => {
-    if (authLoading) {
-      return;
-    }
-
-    setAuthError("");
-    setAuthLoading("google");
-
-    try {
-      await signInWithPopup(firebaseAuth, googleProvider);
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Falha no login com Google.");
-    } finally {
-      setAuthLoading(null);
-    }
-  };
 
   const submitLogout = async () => {
     setIsSigningOut(true);
@@ -259,7 +219,7 @@ export function AdminShell({ slug }: AdminShellProps) {
       await signOut(firebaseAuth);
       setIsLogoutConfirmOpen(false);
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : "Não foi possível sair do painel.", "error");
+      showFeedback(getFriendlyErrorMessage(error, "Não foi possível sair do painel."), "error");
     } finally {
       setIsSigningOut(false);
     }
@@ -272,7 +232,7 @@ export function AdminShell({ slug }: AdminShellProps) {
       setBundle(user ? await getAdminStoreBundleBySlug(slug) : await getStoreBundleBySlug(slug));
       setLoadError("");
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : "Não foi possível atualizar a loja.", "error");
+      showFeedback(getFriendlyErrorMessage(error, "Não foi possível atualizar a loja."), "error");
     } finally {
       setIsRefreshing(false);
     }
@@ -379,45 +339,8 @@ export function AdminShell({ slug }: AdminShellProps) {
   if (!user) {
     return (
       <ThemeScope theme={bundle?.theme || fallbackAdminTheme}>
-        <main className="admin-shell admin-shell--locked">
-          <form className="admin-shell__login" onSubmit={submitEmailLogin} aria-busy={Boolean(authLoading)}>
-            <Coffee size={32} aria-hidden />
-            <h1 className="admin-shell__login-title">Entrar no painel</h1>
-            {loadError ? <p className="admin-shell__error">{loadError}</p> : null}
-            <label className="admin-shell__field">
-              <span>Email *</span>
-              <input
-                className="admin-shell__control"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                autoComplete="email"
-                disabled={Boolean(authLoading)}
-                required
-              />
-            </label>
-            <label className="admin-shell__field">
-              <span>Senha *</span>
-              <input
-                className="admin-shell__control"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-                autoComplete="current-password"
-                disabled={Boolean(authLoading)}
-                required
-              />
-            </label>
-            {authError ? <p className="admin-shell__error">{authError}</p> : null}
-            <button className="admin-shell__primary" type="submit" disabled={Boolean(authLoading)}>
-              {authLoading === "email" ? <Loader2 className="admin-shell__spinner" size={17} aria-hidden /> : null}
-              {authLoading === "email" ? "Entrando" : "Entrar"}
-            </button>
-            <button className="admin-shell__secondary" type="button" onClick={submitGoogleLogin} disabled={Boolean(authLoading)}>
-              {authLoading === "google" ? <Loader2 className="admin-shell__spinner" size={17} aria-hidden /> : null}
-              {authLoading === "google" ? "Conectando" : "Entrar com Google"}
-            </button>
-          </form>
+        <main className="admin-entry admin-entry--centered">
+          <AdminLoginForm />
         </main>
       </ThemeScope>
     );
@@ -519,10 +442,10 @@ export function AdminShell({ slug }: AdminShellProps) {
             </div>
             {activeTab === "orders" ? (
               <div className="admin-shell__topbar-actions">
-                <button className="admin-shell__refresh" type="button" onClick={refreshBundle} disabled={isRefreshing}>
-                  <RefreshCw size={17} aria-hidden />
-                  {isRefreshing ? "Atualizando" : "Atualizar"}
-                </button>
+                <span className="admin-shell__live" title="Novos pedidos aparecem sozinhos, em tempo real">
+                  <span className="admin-shell__live-dot" aria-hidden />
+                  Ao vivo
+                </span>
                 <button className="admin-shell__new-order" type="button" onClick={() => setOrderDialog({})}>
                   <Plus size={17} aria-hidden />
                   Novo pedido
