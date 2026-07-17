@@ -101,6 +101,10 @@ function MenuManagerComponent(
   const [failedItemImages, setFailedItemImages] = useState<Record<string, string>>({});
 
   const activeCategories = useMemo(() => categories.filter((category) => category.isActive), [categories]);
+  const itemsMissingPhoto = useMemo(
+    () => menuItems.filter((item) => !item.imageUrl || item.imageUrl.includes("placeholder-item")).length,
+    [menuItems],
+  );
   const groupedItems = useMemo(
     () =>
       activeCategories.map((category) => ({
@@ -435,6 +439,16 @@ function MenuManagerComponent(
               </button>
             </div>
           </div>
+
+          {itemsMissingPhoto ? (
+            <p className="menu-manager__photo-nudge" role="status">
+              <strong className="menu-manager__photo-nudge-strong">
+                {itemsMissingPhoto} de {menuItems.length}{" "}
+                {menuItems.length === 1 ? "item ainda sem foto real" : "itens ainda sem foto real"}.
+              </strong>{" "}
+              Fotos reais aumentam os pedidos — toque no lápis de editar para adicionar a imagem de cada item.
+            </p>
+          ) : null}
 
           <div className="menu-manager__categories">
             {groupedItems.map(({ category, items }) => (

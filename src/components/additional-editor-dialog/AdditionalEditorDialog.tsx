@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2, Save, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
+import { useFocusTrap } from "@/components/ui/dialog/use-focus-trap";
 import type { AdditionalInput } from "@/lib/services/store-service";
 import { formatPriceInput, getPriceDigits, parsePrice, sanitizePriceDigits } from "@/lib/utils/input-format";
 import type { Additional } from "@/types/menu";
@@ -24,6 +25,8 @@ export function AdditionalEditorDialog({
   const [priceDigits, setPriceDigits] = useState(getPriceDigits(additional?.price));
   const [isAvailable, setIsAvailable] = useState(additional?.isAvailable ?? true);
   const [error, setError] = useState("");
+  const panelRef = useRef<HTMLFormElement>(null);
+  useFocusTrap(panelRef);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,6 +53,7 @@ export function AdditionalEditorDialog({
   return (
     <div className="additional-editor-dialog" role="presentation" onMouseDown={isSaving ? undefined : onClose}>
       <form
+        ref={panelRef}
         className="additional-editor-dialog__panel"
         role="dialog"
         aria-modal="true"

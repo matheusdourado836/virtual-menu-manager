@@ -86,6 +86,21 @@
     gap: var(--space-5);
   }
 
+  &__photo-nudge {
+    padding: var(--space-3) var(--space-4);
+    border: var(--border-thin) solid color-mix(in srgb, var(--color-warning) 30%, var(--color-border));
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface-strong));
+    font-size: var(--text-sm);
+    line-height: var(--line-normal);
+  }
+
+  &__photo-nudge-strong {
+    color: var(--color-text);
+    font-weight: 800;
+  }
+
   &__toolbar {
     display: grid;
     gap: var(--space-3);

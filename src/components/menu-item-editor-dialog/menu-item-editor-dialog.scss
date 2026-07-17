@@ -218,8 +218,8 @@
     z-index: 2;
     display: inline-grid;
     place-items: center;
-    width: var(--space-7);
-    height: var(--space-7);
+    width: var(--button-height);
+    height: var(--button-height);
     border: var(--border-thin) solid var(--admin-color-border);
     border-radius: var(--radius-pill);
     color: var(--admin-color-text);

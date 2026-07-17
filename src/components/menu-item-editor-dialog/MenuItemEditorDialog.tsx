@@ -7,6 +7,8 @@ import { ImagePlus, Loader2, Plus, Save, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
 import { SortableAdditionalCard } from "@/components/menu-item-editor-dialog/sortable-additional-card/SortableAdditionalCard";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
+import { getFriendlyErrorMessage } from "@/lib/errors/friendly-error";
 import { deleteUploadedImage, uploadMenuItemImage, type MenuItemInput } from "@/lib/services/store-service";
 import { formatPriceInput, getPriceDigits, parsePrice, sanitizePriceDigits } from "@/lib/utils/input-format";
 import type { Additional, Category, MenuItem, OptionGroup } from "@/types/menu";
@@ -62,7 +64,25 @@ export function MenuItemEditorDialog({
   const [isImageDragging, setIsImageDragging] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
+  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
   const isBusy = isSaving || isUploadingImage || isCreatingCategory;
+  const isDirty =
+    Boolean(imageFile) ||
+    isImageRemoved ||
+    name.trim() !== (item?.name.trim() ?? "") ||
+    description.trim() !== (item?.description.trim() ?? "") ||
+    priceDigits !== getPriceDigits(item?.price);
+  const requestClose = () => {
+    if (isBusy) {
+      return;
+    }
+
+    if (isDirty) {
+      setIsDiscardConfirmOpen(true);
+    } else {
+      onClose();
+    }
+  };
   const displayedImageUrl = isImageRemoved ? "" : imagePreviewUrl || currentImageUrl;
   const availableCategories = [
     ...categories,
@@ -164,8 +184,8 @@ export function MenuItemEditorDialog({
       if (currentImageUrl && currentImageUrl !== imageUrl) {
         await deleteUploadedImage(currentImageUrl).catch(() => undefined);
       }
-    } catch {
-      setError("Revise os dados e tente novamente.");
+    } catch (submitError) {
+      setError(getFriendlyErrorMessage(submitError, "Não foi possível salvar o item. Revise os dados e tente novamente."));
     } finally {
       setIsUploadingImage(false);
     }
@@ -305,7 +325,7 @@ export function MenuItemEditorDialog({
   };
 
   return (
-    <div className="menu-item-editor-dialog" role="presentation" onMouseDown={isBusy ? undefined : onClose}>
+    <div className="menu-item-editor-dialog" role="presentation" onMouseDown={isBusy ? undefined : requestClose}>
       <form
         className="menu-item-editor-dialog__panel"
         role="dialog"
@@ -321,7 +341,7 @@ export function MenuItemEditorDialog({
               {item ? item.name : "Criar item do cardápio"}
             </h2>
           </div>
-          <button className="menu-item-editor-dialog__close" type="button" onClick={onClose} disabled={isBusy} aria-label="Fechar">
+          <button className="menu-item-editor-dialog__close" type="button" onClick={requestClose} disabled={isBusy} aria-label="Fechar">
             <X size={20} aria-hidden />
           </button>
         </header>
@@ -457,17 +477,17 @@ export function MenuItemEditorDialog({
                 <input
                   className="menu-item-editor-dialog__toggle-input"
                   type="checkbox"
-                  checked={!hasAdditionals}
+                  checked={hasAdditionals}
                   onChange={(event) => {
-                    setHasAdditionals(!event.target.checked);
-                    if (event.target.checked) {
+                    setHasAdditionals(event.target.checked);
+                    if (!event.target.checked) {
                       setSelectedAdditionalIds([]);
                     }
                     setError("");
                   }}
                 />
                 <span className="menu-item-editor-dialog__toggle-control" />
-                Sem adicionais
+                Este item tem adicionais
               </label>
             </div>
 
@@ -517,7 +537,7 @@ export function MenuItemEditorDialog({
 
         <footer className="menu-item-editor-dialog__footer">
           {error ? <p className="menu-item-editor-dialog__error">{error}</p> : null}
-          <button className="menu-item-editor-dialog__cancel" type="button" onClick={onClose} disabled={isBusy}>
+          <button className="menu-item-editor-dialog__cancel" type="button" onClick={requestClose} disabled={isBusy}>
             Cancelar
           </button>
           <button className="menu-item-editor-dialog__submit" type="submit" disabled={isBusy}>
@@ -603,6 +623,18 @@ export function MenuItemEditorDialog({
             </div>
           </section>
         </div>
+      ) : null}
+
+      {isDiscardConfirmOpen ? (
+        <ConfirmDialog
+          title="Descartar alterações?"
+          description="As informações preenchidas neste item serão perdidas."
+          confirmLabel="Descartar"
+          cancelLabel="Continuar editando"
+          loadingLabel="Descartando"
+          onCancel={() => setIsDiscardConfirmOpen(false)}
+          onConfirm={onClose}
+        />
       ) : null}
     </div>
   );
