@@ -8,6 +8,7 @@ import { ThemeScope } from "@/components/theme-scope/ThemeScope";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import {
+  createCartLine,
   describeCartReconciliation,
   getCartSubtotal,
   getLineTotal,
@@ -27,7 +28,7 @@ import { createOrder, getStoreBundleBySlug } from "@/lib/services/store-service"
 import { formatPhoneInput, isValidBrazilianPhone } from "@/lib/utils/input-format";
 import { formatCurrency } from "@/lib/utils/money";
 import { getStoreOpenState } from "@/lib/utils/opening-hours";
-import type { CartLine, PaymentMethod, StoreBundle } from "@/types/menu";
+import type { CartLine, MenuItem, PaymentMethod, StoreBundle } from "@/types/menu";
 import "./cart-page.scss";
 
 interface CartPageProps {
@@ -127,6 +128,28 @@ export function CartPage({ slug, tableId }: CartPageProps) {
   const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
   const menuLink = table?.id ? `/loja/${slug}/mesa/${table.id}` : `/loja/${slug}`;
   const isTableOrder = Boolean(table);
+  const suggestions = useMemo(() => {
+    if (!bundle) {
+      return [];
+    }
+
+    const cartItemIds = new Set(cartLines.map((line) => line.menuItemId));
+    const cartCategoryIds = new Set(
+      cartLines
+        .map((line) => bundle.menuItems.find((item) => item.id === line.menuItemId)?.categoryId)
+        .filter((categoryId): categoryId is string => Boolean(categoryId)),
+    );
+
+    return bundle.menuItems
+      .filter(
+        (item) =>
+          item.isAvailable
+          && !cartItemIds.has(item.id)
+          && !cartCategoryIds.has(item.categoryId)
+          && !item.optionsGroups.some((group) => group.isRequired || (Number(group.minSelected) || 0) > 0),
+      )
+      .slice(0, 3);
+  }, [bundle, cartLines]);
 
   const updateCart = (lines: CartLine[]) => {
     setError("");
@@ -135,6 +158,10 @@ export function CartPage({ slug, tableId }: CartPageProps) {
     if (bundle) {
       writeStoredCart(bundle.store.id, table?.id, lines);
     }
+  };
+
+  const addSuggestion = (item: MenuItem) => {
+    updateCart([...cartLines, { ...createCartLine(item, [], undefined), quantity: 1 }]);
   };
 
   const updateQuantity = (lineId: string, quantity: number) => {
@@ -480,6 +507,32 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                   }
                 />
               )}
+
+              {cartLines.length > 0 && suggestions.length > 0 ? (
+                <div className="cart-page__suggestions">
+                  <span className="cart-page__suggestions-title">Vai bem com…</span>
+                  <div className="cart-page__suggestions-list">
+                    {suggestions.map((item) => (
+                      <button
+                        className="cart-page__suggestion"
+                        type="button"
+                        key={item.id}
+                        onClick={() => addSuggestion(item)}
+                        aria-label={`Adicionar ${item.name} ao pedido`}
+                      >
+                        <span className="cart-page__suggestion-copy">
+                          <strong className="cart-page__suggestion-name">{item.name}</strong>
+                          <small className="cart-page__suggestion-price">{formatCurrency(item.price)}</small>
+                        </span>
+                        <span className="cart-page__suggestion-add" aria-hidden="true">
+                          <Plus size={16} aria-hidden />
+                          Adicionar
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             {cartLines.length ? (
