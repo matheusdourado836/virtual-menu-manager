@@ -8,6 +8,7 @@ import type { CustomerDirectoryItem } from "@/features/customer-directory/types/
 import { buildCustomerDirectory } from "@/features/customer-directory/utils/customer-aggregation";
 import { downloadCustomersCsv } from "@/features/customer-directory/utils/export-customers-csv";
 import { formatDateTime } from "@/lib/utils/dates";
+import { normalizeSearchText } from "@/lib/utils/search";
 import { formatDateInput } from "@/features/financial-report/utils/financial-calculations";
 import type { Order } from "@/types/menu";
 import "./customer-directory.scss";
@@ -17,7 +18,7 @@ interface CustomerDirectoryProps {
 }
 
 const matchesSearch = (customer: CustomerDirectoryItem, search: string) => {
-  const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
+  const normalizedSearch = normalizeSearchText(search);
 
   if (!normalizedSearch) {
     return true;
@@ -27,7 +28,7 @@ const matchesSearch = (customer: CustomerDirectoryItem, search: string) => {
   const searchDigits = normalizedSearch.replace(/\D/g, "");
 
   return (
-    customer.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)
+    normalizeSearchText(customer.name).includes(normalizedSearch)
     || (searchDigits.length > 0 && (phoneDigits.includes(searchDigits) || customer.id.includes(searchDigits)))
   );
 };

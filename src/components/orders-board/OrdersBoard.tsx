@@ -24,6 +24,7 @@ import { formatDateTime } from "@/lib/utils/dates";
 import { playUiSound, UI_SOUNDS } from "@/lib/utils/audio";
 import { formatCurrency } from "@/lib/utils/money";
 import { getPaymentMethodLabel } from "@/lib/utils/payment";
+import { normalizeSearchText } from "@/lib/utils/search";
 import type { Order, OrderStatus } from "@/types/menu";
 import "./orders-board.scss";
 
@@ -147,7 +148,7 @@ export function OrdersBoard({
   }, [selectedGroup]);
 
   const filteredOrders = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
+    const normalized = normalizeSearchText(search);
     const selectedStatuses =
       orderGroups.find((group) => group.id === selectedGroup)?.statuses || [];
     const groupOrders = orders.filter((order) =>
@@ -160,9 +161,9 @@ export function OrdersBoard({
 
     return groupOrders.filter(
       (order) =>
-        order.code.toLowerCase().includes(normalized) ||
-        order.customerName.toLowerCase().includes(normalized) ||
-        order.tableLabel?.toLowerCase().includes(normalized),
+        normalizeSearchText(order.code).includes(normalized) ||
+        normalizeSearchText(order.customerName).includes(normalized) ||
+        normalizeSearchText(order.tableLabel ?? "").includes(normalized),
     );
   }, [orders, search, selectedGroup]);
 
