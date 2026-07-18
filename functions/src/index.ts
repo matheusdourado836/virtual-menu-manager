@@ -302,6 +302,7 @@ const menuItemFieldsSchema = z.object({
   price: z.number().min(0).max(99999),
   isAvailable: z.boolean().default(true),
   optionsGroups: z.array(optionGroupSchema).max(20),
+  upsellItemIds: z.array(z.string().trim().min(1).max(120)).max(6).optional(),
 });
 
 const createMenuItemSchema = menuItemFieldsSchema.extend({
@@ -401,6 +402,11 @@ const submitOrderFeedbackSchema = z.object({
   orderId: z.string().trim().min(1),
   rating: z.number().int().min(1).max(5),
   comment: optionalTrimmedValue(500),
+});
+
+const cancelCustomerOrderSchema = z.object({
+  orderId: z.string().trim().min(1),
+  reason: optionalTrimmedValue(240),
 });
 
 const assertPlatformAdmin = (auth: { token?: admin.auth.DecodedIdToken } | undefined) => {
@@ -1440,6 +1446,7 @@ export const createMenuItem = onCall(async (request) => {
     isAvailable: payload.isAvailable,
     order: nextOrder,
     optionsGroups: payload.optionsGroups,
+    upsellItemIds: payload.upsellItemIds,
     createdAt: now,
     updatedAt: now,
   };
@@ -1476,6 +1483,7 @@ export const updateMenuItem = onCall(async (request) => {
       price: payload.price,
       isAvailable: payload.isAvailable,
       optionsGroups: payload.optionsGroups,
+      upsellItemIds: payload.upsellItemIds,
       updatedAt: now,
     }),
     { merge: true },
@@ -1550,6 +1558,57 @@ export const submitOrderFeedback = onCall(async (request) => {
   });
 
   return result;
+});
+
+// Cancelamento pelo próprio cliente (público, sem login), no mesmo padrão do
+// submitOrderFeedback: resolve a loja pelo orderLookup e valida o estado do
+// pedido. Só permite cancelar antes de a cozinha começar o preparo.
+const customerCancellableStatuses = new Set(["received", "accepted"]);
+
+export const cancelCustomerOrder = onCall(async (request) => {
+  const payload = cancelCustomerOrderSchema.parse(request.data);
+  const lookupSnapshot = await db.doc(`orderLookup/${payload.orderId}`).get();
+  const lookup = lookupSnapshot.data() as { storeId?: string; orderId?: string } | undefined;
+
+  if (!lookup?.storeId || !lookup.orderId) {
+    throw new HttpsError("not-found", "Pedido não encontrado.");
+  }
+
+  const orderRef = db.doc(`stores/${lookup.storeId}/orders/${lookup.orderId}`);
+  const now = new Date().toISOString();
+
+  await db.runTransaction(async (transaction) => {
+    const orderSnapshot = await transaction.get(orderRef);
+    const order = orderSnapshot.data() as { status?: string } | undefined;
+
+    if (!orderSnapshot.exists || !order) {
+      throw new HttpsError("not-found", "Pedido não encontrado.");
+    }
+
+    if (order.status === "cancelled") {
+      return;
+    }
+
+    if (!customerCancellableStatuses.has(order.status ?? "")) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Este pedido já está em preparo e não pode mais ser cancelado por aqui. Fale com o atendimento da loja.",
+      );
+    }
+
+    transaction.set(
+      orderRef,
+      {
+        status: "cancelled",
+        updatedAt: now,
+        cancelledAt: now,
+        cancelReason: payload.reason || "Cancelado pelo cliente",
+      },
+      { merge: true },
+    );
+  });
+
+  return { ok: true };
 });
 
 export const updateStoreSettings = onCall(async (request) => {

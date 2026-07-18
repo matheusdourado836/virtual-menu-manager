@@ -395,6 +395,70 @@
     }
   }
 
+  &__upsell-list {
+    display: grid;
+    gap: var(--space-2);
+
+    @include respond-to(tablet) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  &__upsell-option {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2);
+    border: var(--border-thin) solid var(--admin-color-border);
+    border-radius: var(--radius-md);
+    color: var(--admin-color-text);
+    background: var(--admin-color-surface);
+    cursor: pointer;
+    transition:
+      border-color var(--duration-fast) var(--ease-standard),
+      background var(--duration-fast) var(--ease-standard);
+
+    &--selected {
+      border-color: var(--admin-color-sidebar);
+      background: color-mix(
+        in srgb,
+        var(--admin-color-sidebar) var(--color-mix-subtle),
+        var(--admin-color-surface)
+      );
+    }
+  }
+
+  &__upsell-checkbox {
+    width: var(--space-5);
+    height: var(--space-5);
+    accent-color: var(--admin-color-sidebar);
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+  }
+
+  &__upsell-copy {
+    min-width: 0;
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  &__upsell-name {
+    overflow: hidden;
+    color: var(--admin-color-text);
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__upsell-price {
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-xs);
+  }
+
   &__footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

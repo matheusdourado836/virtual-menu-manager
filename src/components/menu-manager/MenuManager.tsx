@@ -618,6 +618,7 @@ function MenuManagerComponent(
           storeId={storeId}
           categories={activeCategories}
           additionals={sortedAdditionals}
+          menuItems={menuItems}
           item={editingItem || undefined}
           isSaving={Boolean(savingItemId)}
           onClose={() => {

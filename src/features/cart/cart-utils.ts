@@ -3,6 +3,12 @@ import { formatCurrency } from "@/lib/utils/money";
 
 const cartStoragePrefix = "virtual-menu-manager:cart";
 
+// Item que pode ser adicionado com um toque (disponível e sem adicional obrigatório).
+// Usado pelas sugestões e pelo nudge para não criar linha de pedido incompleta.
+export const isQuickAddItem = (item: MenuItem): boolean =>
+  item.isAvailable
+  && !item.optionsGroups.some((group) => group.isRequired || (Number(group.minSelected) || 0) > 0);
+
 export type CartReconciliationChange =
   | {
     type: "item_unavailable";

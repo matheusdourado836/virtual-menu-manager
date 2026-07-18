@@ -12,10 +12,16 @@ import {
   describeCartReconciliation,
   getCartSubtotal,
   getLineTotal,
+  isQuickAddItem,
   readStoredCart,
   reconcileCartWithMenu,
   writeStoredCart,
 } from "@/features/cart/cart-utils";
+import {
+  clearCustomerProfile,
+  readCustomerProfile,
+  writeCustomerProfile,
+} from "@/features/customer-profile/customer-profile-storage";
 import { writeStoredOrderReference } from "@/features/order-tracking/order-tracking-storage";
 import {
   MAX_CUSTOMER_NAME_LENGTH,
@@ -42,10 +48,12 @@ export function CartPage({ slug, tableId }: CartPageProps) {
   const router = useRouter();
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [initialProfile] = useState(readCustomerProfile);
+  const [customerName, setCustomerName] = useState(initialProfile?.name ?? "");
+  const [customerPhone, setCustomerPhone] = useState(initialProfile?.phone ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_pickup");
   const [observation, setObservation] = useState("");
+  const [saveProfile, setSaveProfile] = useState(initialProfile !== null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -134,19 +142,47 @@ export function CartPage({ slug, tableId }: CartPageProps) {
     }
 
     const cartItemIds = new Set(cartLines.map((line) => line.menuItemId));
+    const itemById = new Map(bundle.menuItems.map((item) => [item.id, item]));
+
+    // 1) Preferir os "combina com" que a loja configurou nos itens do carrinho.
+    const curated: MenuItem[] = [];
+    const curatedIds = new Set<string>();
+
+    cartLines.forEach((line) => {
+      const cartItem = itemById.get(line.menuItemId);
+
+      (cartItem?.upsellItemIds ?? []).forEach((upsellId) => {
+        const candidate = itemById.get(upsellId);
+
+        if (
+          candidate
+          && !cartItemIds.has(candidate.id)
+          && !curatedIds.has(candidate.id)
+          && isQuickAddItem(candidate)
+        ) {
+          curatedIds.add(candidate.id);
+          curated.push(candidate);
+        }
+      });
+    });
+
+    if (curated.length) {
+      return curated.slice(0, 4);
+    }
+
+    // 2) Fallback: sugestão automática por categoria (comportamento antigo).
     const cartCategoryIds = new Set(
       cartLines
-        .map((line) => bundle.menuItems.find((item) => item.id === line.menuItemId)?.categoryId)
+        .map((line) => itemById.get(line.menuItemId)?.categoryId)
         .filter((categoryId): categoryId is string => Boolean(categoryId)),
     );
 
     return bundle.menuItems
       .filter(
         (item) =>
-          item.isAvailable
+          isQuickAddItem(item)
           && !cartItemIds.has(item.id)
-          && !cartCategoryIds.has(item.categoryId)
-          && !item.optionsGroups.some((group) => group.isRequired || (Number(group.minSelected) || 0) > 0),
+          && !cartCategoryIds.has(item.categoryId),
       )
       .slice(0, 3);
   }, [bundle, cartLines]);
@@ -236,6 +272,15 @@ export function CartPage({ slug, tableId }: CartPageProps) {
 
       writeStoredOrderReference(bundle.store.id, table?.id, order.id, menuLink);
       updateCart([]);
+
+      if (!isTableOrder) {
+        if (saveProfile) {
+          writeCustomerProfile({ name: customerName, phone: customerPhone });
+        } else {
+          clearCustomerProfile();
+        }
+      }
+
       router.push(`/pedido/${order.id}`);
     } catch (submitError) {
       const failure = reportOrderSubmissionError(submitError, {
@@ -581,6 +626,18 @@ export function CartPage({ slug, tableId }: CartPageProps) {
                           placeholder="(00) 00000-0000"
                           onChange={(event) => setCustomerPhone(formatPhoneInput(event.target.value))}
                         />
+                      </label>
+
+                      <label className="cart-page__save-profile">
+                        <input
+                          className="cart-page__save-profile-check"
+                          type="checkbox"
+                          checked={saveProfile}
+                          onChange={(event) => setSaveProfile(event.target.checked)}
+                        />
+                        <span className="cart-page__save-profile-text">
+                          Salvar meus dados neste dispositivo para agilizar os próximos pedidos, em qualquer loja.
+                        </span>
                       </label>
                     </>
                   )}

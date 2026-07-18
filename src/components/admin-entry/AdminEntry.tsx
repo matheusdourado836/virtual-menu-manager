@@ -5,7 +5,6 @@ import { ArrowRight, LogOut, RefreshCw, Store } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { AdminLoginForm } from "@/components/admin-login-form/AdminLoginForm";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { ThemeScope } from "@/components/theme-scope/ThemeScope";
@@ -69,6 +68,12 @@ export function AdminEntry() {
     if (updatedUser) void loadStores();
   }), [loadStores]);
 
+  useEffect(() => {
+    if (isAuthReady && !user) {
+      router.replace("/login");
+    }
+  }, [isAuthReady, user, router]);
+
   const logout = async () => {
     await signOut(firebaseAuth);
   };
@@ -87,7 +92,7 @@ export function AdminEntry() {
     return (
       <ThemeScope theme={fallbackAdminTheme}>
         <main className="admin-entry admin-entry--centered">
-          <AdminLoginForm />
+          <LoadingState label="Redirecionando" />
         </main>
       </ThemeScope>
     );

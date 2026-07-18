@@ -21,8 +21,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AdminLoginForm } from "@/components/admin-login-form/AdminLoginForm";
 import { AdminOrderDialog } from "@/components/admin-order-dialog/AdminOrderDialog";
 import { FeedbacksManager } from "@/components/feedbacks-manager/FeedbacksManager";
 import { MenuManager, type MenuManagerHandle } from "@/components/menu-manager/MenuManager";
@@ -88,6 +88,7 @@ interface AdminShellProps {
 }
 
 export function AdminShell({ slug }: AdminShellProps) {
+  const router = useRouter();
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersBoardGroup, setOrdersBoardGroup] = useState<OrderGroup>("all");
@@ -142,6 +143,14 @@ export function AdminShell({ slug }: AdminShellProps) {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (isAuthReady && !user) {
+      // Logout ou sessão expirada: sai da URL presa ao slug e vai para o login,
+      // que depois redireciona para a loja correta.
+      router.replace("/login");
+    }
+  }, [isAuthReady, user, router]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -337,13 +346,7 @@ export function AdminShell({ slug }: AdminShellProps) {
   }
 
   if (!user) {
-    return (
-      <ThemeScope theme={bundle?.theme || fallbackAdminTheme}>
-        <main className="admin-entry admin-entry--centered">
-          <AdminLoginForm />
-        </main>
-      </ThemeScope>
-    );
+    return <LoadingState label="Redirecionando" />;
   }
 
   if (isLoading) {
@@ -444,7 +447,7 @@ export function AdminShell({ slug }: AdminShellProps) {
               <div className="admin-shell__topbar-actions">
                 <span className="admin-shell__live" title="Novos pedidos aparecem sozinhos, em tempo real">
                   <span className="admin-shell__live-dot" aria-hidden />
-                  Ao vivo
+                  Recebendo pedidos
                 </span>
                 <button className="admin-shell__new-order" type="button" onClick={() => setOrderDialog({})}>
                   <Plus size={17} aria-hidden />

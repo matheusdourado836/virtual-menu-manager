@@ -2,16 +2,19 @@
 
 import { ArrowLeft, CheckCircle2, Clock3, ExternalLink, Loader2, RefreshCw, Search, Send, Star, XCircle } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
+import { writeStoredCart } from "@/features/cart/cart-utils";
 import {
   clearStoredOrderById,
   clearStoredOrderReference,
   readStoredOrderMenuPath,
   writeMenuNotice,
 } from "@/features/order-tracking/order-tracking-storage";
-import { getStoreById, submitOrderFeedback, subscribeOrder } from "@/lib/services/store-service";
+import { cancelCustomerOrder, getStoreById, submitOrderFeedback, subscribeOrder } from "@/lib/services/store-service";
 import { formatCurrency } from "@/lib/utils/money";
 import type { Order, OrderStatus, Store } from "@/types/menu";
 import "./order-tracker.scss";
@@ -46,6 +49,7 @@ interface OrderTrackerProps {
 }
 
 export function OrderTracker({ orderId }: OrderTrackerProps) {
+  const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +60,9 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackError, setFeedbackError] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const hasRedirected = useRef(false);
 
   useEffect(() => {
@@ -149,6 +156,45 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
       setFeedbackError(error instanceof Error ? error.message : "Não foi possível enviar sua avaliação.");
     } finally {
       setIsSubmittingFeedback(false);
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!order || isCancelling) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError("");
+
+    try {
+      await cancelCustomerOrder(order.id);
+
+      // Cancelou: limpa o carrinho e a referência de pedido ativo, avisa e volta ao cardápio.
+      writeStoredCart(order.storeId, order.tableId, []);
+      clearStoredOrderReference(order.storeId, order.tableId, order.id);
+      clearStoredOrderById(order.id);
+
+      const returnPath =
+        menuLink
+        || (store ? (order.tableId ? `/loja/${store.slug}/mesa/${order.tableId}` : `/loja/${store.slug}`) : "");
+
+      if (returnPath) {
+        writeMenuNotice(returnPath, "Pedido cancelado.");
+        router.push(returnPath);
+        return;
+      }
+
+      setIsCancelConfirmOpen(false);
+      setIsCancelling(false);
+    } catch (error) {
+      setIsCancelConfirmOpen(false);
+      setCancelError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Não foi possível cancelar o pedido. Tente novamente.",
+      );
+      setIsCancelling(false);
     }
   };
 
@@ -369,7 +415,45 @@ export function OrderTracker({ orderId }: OrderTrackerProps) {
           <Clock3 size={16} aria-hidden />
           A tela atualiza automaticamente quando a cozinha muda o status.
         </p>
+
+        {order.status === "received" || order.status === "accepted" ? (
+          <div className="order-tracker__cancel">
+            {cancelError ? (
+              <p className="order-tracker__cancel-error" role="alert">
+                {cancelError}
+              </p>
+            ) : null}
+            <button
+              className="order-tracker__cancel-button"
+              type="button"
+              onClick={() => {
+                setCancelError("");
+                setIsCancelConfirmOpen(true);
+              }}
+            >
+              <XCircle size={17} aria-hidden />
+              Cancelar pedido
+            </button>
+          </div>
+        ) : null}
       </section>
+
+      {isCancelConfirmOpen ? (
+        <ConfirmDialog
+          title="Cancelar este pedido?"
+          description="Você pode cancelar enquanto a loja ainda não começou o preparo. Essa ação não pode ser desfeita."
+          confirmLabel="Cancelar pedido"
+          cancelLabel="Voltar"
+          loadingLabel="Cancelando"
+          isLoading={isCancelling}
+          onCancel={() => {
+            if (!isCancelling) {
+              setIsCancelConfirmOpen(false);
+            }
+          }}
+          onConfirm={() => void confirmCancel()}
+        />
+      ) : null}
     </main>
   );
 }

@@ -113,6 +113,7 @@ export interface MenuItem {
   isAvailable: boolean;
   order: number;
   optionsGroups: OptionGroup[];
+  upsellItemIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

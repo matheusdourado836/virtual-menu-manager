@@ -123,6 +123,13 @@
     justify-content: flex-end;
     gap: var(--space-2);
 
+    // Abaixo de 550px a busca fica espremida ao lado do botão: empilha em coluna,
+    // com a busca em cima (largura total) e o botão embaixo.
+    @media (max-width: 550px) {
+      flex-direction: column-reverse;
+      align-items: stretch;
+    }
+
     @include respond-to(tablet) {
       flex: 1 1 var(--orders-board-search-min);
       width: auto;

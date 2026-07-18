@@ -348,6 +348,37 @@
     }
   }
 
+  &__save-profile {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: var(--border-thin) solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+  }
+
+  &__save-profile-check {
+    width: var(--space-5);
+    height: var(--space-5);
+    flex-shrink: 0;
+    margin-top: 1px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+
+  &__save-profile-text {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    line-height: var(--line-normal);
+  }
+
   &__summary {
     justify-content: space-between;
     gap: var(--space-3);

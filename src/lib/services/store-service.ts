@@ -25,6 +25,7 @@ export interface MenuItemInput {
   price: number;
   isAvailable: boolean;
   optionsGroups: OptionGroup[];
+  upsellItemIds?: string[];
 }
 
 export interface AdditionalInput {
@@ -191,6 +192,11 @@ export const createAdminOrder = async (payload: CreateOrderPayload) => {
   const response = await callable(removeUndefined(payload));
 
   return response.data as Order;
+};
+
+export const cancelCustomerOrder = async (orderId: string, reason?: string) => {
+  const callable = httpsCallable(firebaseFunctions, "cancelCustomerOrder");
+  await callable(removeUndefined({ orderId, reason }));
 };
 
 export const createTable = async (storeId: string, label: string) => {

@@ -18,6 +18,7 @@ interface MenuItemEditorDialogProps {
   storeId: string;
   categories: Category[];
   additionals: Additional[];
+  menuItems: MenuItem[];
   item?: MenuItem;
   isSaving: boolean;
   onClose: () => void;
@@ -36,6 +37,7 @@ export function MenuItemEditorDialog({
   storeId,
   categories,
   additionals,
+  menuItems,
   item,
   isSaving,
   onClose,
@@ -56,6 +58,8 @@ export function MenuItemEditorDialog({
   );
   const [selectedAdditionalIds, setSelectedAdditionalIds] = useState(getInitialSelectedAdditionalIds(item));
   const [hasCustomAdditionalOrder, setHasCustomAdditionalOrder] = useState(Boolean(item));
+  const [hasUpsell, setHasUpsell] = useState((item?.upsellItemIds?.length ?? 0) > 0);
+  const [selectedUpsellIds, setSelectedUpsellIds] = useState<string[]>(item?.upsellItemIds ?? []);
   const [createdCategories, setCreatedCategories] = useState<Category[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [isCategoryCreatorOpen, setIsCategoryCreatorOpen] = useState(false);
@@ -101,6 +105,14 @@ export function MenuItemEditorDialog({
     ...selectedAdditionals,
     ...additionals.filter((additional) => !selectedAdditionalIds.includes(additional.id)),
   ];
+  const upsellCandidates = useMemo(
+    () => menuItems.filter((candidate) => candidate.id !== item?.id),
+    [menuItems, item?.id],
+  );
+  const upsellCandidateIds = useMemo(
+    () => new Set(upsellCandidates.map((candidate) => candidate.id)),
+    [upsellCandidates],
+  );
 
   const buildOptionsGroups = (): OptionGroup[] => {
     if (!hasAdditionals) {
@@ -179,6 +191,7 @@ export function MenuItemEditorDialog({
         price: parsedPrice,
         isAvailable,
         optionsGroups: buildOptionsGroups(),
+        upsellItemIds: hasUpsell ? selectedUpsellIds.filter((id) => upsellCandidateIds.has(id)) : [],
       });
 
       if (currentImageUrl && currentImageUrl !== imageUrl) {
@@ -322,6 +335,23 @@ export function MenuItemEditorDialog({
 
       return arrayMove(current, source.initialIndex, source.index);
     });
+  };
+
+  const upsellLimit = 6;
+
+  const toggleUpsell = (candidateId: string) => {
+    setSelectedUpsellIds((current) => {
+      if (current.includes(candidateId)) {
+        return current.filter((currentId) => currentId !== candidateId);
+      }
+
+      if (current.length >= upsellLimit) {
+        return current;
+      }
+
+      return [...current, candidateId];
+    });
+    setError("");
   };
 
   return (
@@ -511,6 +541,77 @@ export function MenuItemEditorDialog({
               ) : (
                 <p className="menu-item-editor-dialog__hint">
                   Cadastre adicionais na tela de Cardápio para poder vinculá-los ao item.
+                </p>
+              )
+            ) : null}
+          </section>
+
+          <section className="menu-item-editor-dialog__addons">
+            <div className="menu-item-editor-dialog__addons-header">
+              <div>
+                <span className="menu-item-editor-dialog__label">Combina com…</span>
+                <p className="menu-item-editor-dialog__hint">
+                  Opcional. Escolha itens para oferecer junto quando este for adicionado. Se ficar vazio, o sistema
+                  sugere sozinho.
+                </p>
+              </div>
+              <label className="menu-item-editor-dialog__toggle">
+                <input
+                  className="menu-item-editor-dialog__toggle-input"
+                  type="checkbox"
+                  checked={hasUpsell}
+                  onChange={(event) => {
+                    setHasUpsell(event.target.checked);
+                    if (!event.target.checked) {
+                      setSelectedUpsellIds([]);
+                    }
+                    setError("");
+                  }}
+                />
+                <span className="menu-item-editor-dialog__toggle-control" />
+                Este item combina com outros
+              </label>
+            </div>
+
+            {hasUpsell ? (
+              upsellCandidates.length ? (
+                <>
+                  <div className="menu-item-editor-dialog__upsell-list">
+                    {upsellCandidates.map((candidate) => {
+                      const isSelected = selectedUpsellIds.includes(candidate.id);
+
+                      return (
+                        <label
+                          className={`menu-item-editor-dialog__upsell-option${
+                            isSelected ? " menu-item-editor-dialog__upsell-option--selected" : ""
+                          }`}
+                          key={candidate.id}
+                        >
+                          <input
+                            className="menu-item-editor-dialog__upsell-checkbox"
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleUpsell(candidate.id)}
+                            disabled={isBusy || (!isSelected && selectedUpsellIds.length >= upsellLimit)}
+                          />
+                          <span className="menu-item-editor-dialog__upsell-copy">
+                            <strong className="menu-item-editor-dialog__upsell-name">{candidate.name}</strong>
+                            <small className="menu-item-editor-dialog__upsell-price">
+                              {formatPriceInput(getPriceDigits(candidate.price))}
+                              {candidate.isAvailable ? "" : " · indisponível"}
+                            </small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedUpsellIds.length >= upsellLimit ? (
+                    <p className="menu-item-editor-dialog__hint">Você pode escolher até {upsellLimit} itens.</p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="menu-item-editor-dialog__hint">
+                  Cadastre outros itens no cardápio para poder oferecê-los junto.
                 </p>
               )
             ) : null}

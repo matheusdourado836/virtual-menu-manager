@@ -9,11 +9,13 @@ import { ThemeScope } from "@/components/theme-scope/ThemeScope";
 import { EmptyState } from "@/components/ui/empty-state/EmptyState";
 import { LoadingState } from "@/components/ui/loading-state/LoadingState";
 import { Snackbar } from "@/components/ui/snackbar/Snackbar";
+import { UpsellNudgeDialog } from "@/components/upsell-nudge-dialog/UpsellNudgeDialog";
 import {
   createCartLine,
   describeCartReconciliation,
   getCartQuantity,
   getCartSubtotal,
+  isQuickAddItem,
   readStoredCart,
   reconcileCartWithMenu,
   writeStoredCart,
@@ -56,6 +58,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [previewItem, setPreviewItem] = useState<MenuItem | null>(null);
+  const [upsellNudge, setUpsellNudge] = useState<{ sourceName: string; pairs: MenuItem[] } | null>(null);
   const [trackedOrderId, setTrackedOrderId] = useState("");
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => new Date());
@@ -205,6 +208,34 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     );
   };
 
+  const resolveUpsellPairs = (sourceItem: MenuItem): MenuItem[] => {
+    if (!bundle) {
+      return [];
+    }
+
+    const cartItemIds = new Set(cartLines.map((line) => line.menuItemId));
+    const itemById = new Map(bundle.menuItems.map((menuItem) => [menuItem.id, menuItem]));
+    const pairs: MenuItem[] = [];
+    const seen = new Set<string>();
+
+    (sourceItem.upsellItemIds ?? []).forEach((pairId) => {
+      const candidate = itemById.get(pairId);
+
+      if (
+        candidate
+        && candidate.id !== sourceItem.id
+        && !cartItemIds.has(candidate.id)
+        && !seen.has(candidate.id)
+        && isQuickAddItem(candidate)
+      ) {
+        seen.add(candidate.id);
+        pairs.push(candidate);
+      }
+    });
+
+    return pairs.slice(0, 4);
+  };
+
   const addItem = (item: MenuItem, quantity = 1) => {
     const line = {
       ...createCartLine(item, getSelectedOptionDetails(item), notes[item.id]),
@@ -214,6 +245,24 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     setSelectedOptions((state) => ({ ...state, [item.id]: [] }));
     setNotes((state) => ({ ...state, [item.id]: "" }));
     setSelectedItem(null);
+
+    const pairs = resolveUpsellPairs(item);
+
+    if (pairs.length) {
+      setUpsellNudge({ sourceName: item.name, pairs });
+    }
+  };
+
+  const addNudgePair = (pair: MenuItem) => {
+    setCartLines((lines) => [...lines, { ...createCartLine(pair, [], undefined), quantity: 1 }]);
+    setUpsellNudge((current) => {
+      if (!current) {
+        return null;
+      }
+
+      const remaining = current.pairs.filter((candidate) => candidate.id !== pair.id);
+      return remaining.length ? { ...current, pairs: remaining } : null;
+    });
   };
 
   const closeItem = useCallback(() => setSelectedItem(null), []);
@@ -475,6 +524,15 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
 
               addItem(selectedItem, quantity);
             }}
+          />
+        ) : null}
+
+        {upsellNudge ? (
+          <UpsellNudgeDialog
+            sourceName={upsellNudge.sourceName}
+            pairs={upsellNudge.pairs}
+            onAdd={addNudgePair}
+            onClose={() => setUpsellNudge(null)}
           />
         ) : null}
 
