@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Clock3, Coffee, MapPin, Plus, ShoppingBag, Utensils, X } from "lucide-react";
+import { AlertTriangle, Clock3, Coffee, MapPin, Plus, Search, ShoppingBag, Utensils, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { type MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -26,6 +26,7 @@ import { reportCartReconciliation } from "@/lib/errors/order-submission-error";
 import { getStoreBundleBySlug } from "@/lib/services/store-service";
 import { getStoreOpenState } from "@/lib/utils/opening-hours";
 import { formatCurrency } from "@/lib/utils/money";
+import { normalizeSearchText } from "@/lib/utils/search";
 import type { CartLine, CartSelectedOption, MenuItem, StoreBundle } from "@/types/menu";
 import "./public-menu.scss";
 
@@ -50,6 +51,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const [bundle, setBundle] = useState<StoreBundle | null>(null);
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [search, setSearch] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -137,13 +139,24 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
     [bundle],
   );
 
+  const normalizedSearch = normalizeSearchText(search);
   const visibleItems = useMemo(() => {
     if (!bundle) {
       return [];
     }
 
-    return bundle.menuItems.filter((item) => item.categoryId === selectedCategory && item.isAvailable);
-  }, [bundle, selectedCategory]);
+    const available = bundle.menuItems.filter((item) => item.isAvailable);
+
+    if (normalizedSearch) {
+      return available.filter(
+        (item) =>
+          normalizeSearchText(item.name).includes(normalizedSearch)
+          || normalizeSearchText(item.description).includes(normalizedSearch),
+      );
+    }
+
+    return available.filter((item) => item.categoryId === selectedCategory);
+  }, [bundle, selectedCategory, normalizedSearch]);
 
   useEffect(() => {
     if (!bundle || !hasLoadedCart) {
@@ -225,6 +238,7 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
   const cartQuantity = getCartQuantity(cartLines);
   const cartSubtotal = getCartSubtotal(cartLines);
   const activeCategory = visibleCategories.find((category) => category.id === selectedCategory);
+  const totalAvailableItems = bundle ? bundle.menuItems.filter((item) => item.isAvailable).length : 0;
   const storeOpenState = useMemo(() => (bundle ? getStoreOpenState(bundle.store, now) : null), [bundle, now]);
   const canReceiveOrders = storeOpenState?.isOpen ?? false;
 
@@ -306,13 +320,30 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
                 role="tab"
                 aria-selected={selectedCategory === category.id}
                 key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => {
+                  setSelectedCategory(category.id);
+                  setSearch("");
+                }}
               >
                 {category.name === "Bebidas" ? <Coffee size={16} aria-hidden /> : <Utensils size={16} aria-hidden />}
                 {category.name}
               </button>
             ))}
           </nav>
+        ) : null}
+
+        {totalAvailableItems > 6 ? (
+          <div className="public-menu__search">
+            <Search size={18} aria-hidden />
+            <input
+              className="public-menu__search-input"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              type="search"
+              placeholder="Buscar no cardápio"
+              aria-label="Buscar no cardápio"
+            />
+          </div>
         ) : null}
 
         {!canReceiveOrders ? (
@@ -326,9 +357,13 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
           <header className="public-menu__section-header">
             <div>
               <span className="public-menu__section-eyebrow">Explore o cardápio</span>
-              <h2 className="public-menu__section-title">{activeCategory?.name || "Itens"}</h2>
+              <h2 className="public-menu__section-title">
+                {normalizedSearch ? "Resultados" : activeCategory?.name || "Itens"}
+              </h2>
             </div>
-            <span className="public-menu__section-count">{visibleItems.length} itens</span>
+            <span className="public-menu__section-count">
+              {visibleItems.length} {visibleItems.length === 1 ? "item" : "itens"}
+            </span>
           </header>
 
           <div className="public-menu__items">
@@ -381,6 +416,12 @@ export function PublicMenu({ slug, tableId }: PublicMenuProps) {
               </article>
             ))}
           </div>
+
+          {normalizedSearch && !visibleItems.length ? (
+            <p className="public-menu__no-results" role="status">
+              Nenhum item encontrado para “{search.trim()}”.
+            </p>
+          ) : null}
         </section>
 
         {cartQuantity > 0 ? (
