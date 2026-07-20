@@ -243,6 +243,11 @@ export const reorderAdditionals = async (storeId: string, additionalIds: string[
   await callable({ storeId, additionalIds });
 };
 
+export const reorderCategories = async (storeId: string, categoryIds: string[]) => {
+  const callable = httpsCallable(firebaseFunctions, "reorderCategories");
+  await callable({ storeId, categoryIds });
+};
+
 export const deleteAdditional = async (storeId: string, additionalId: string) => {
   const callable = httpsCallable(firebaseFunctions, "deleteAdditional");
   await callable({ storeId, additionalId });

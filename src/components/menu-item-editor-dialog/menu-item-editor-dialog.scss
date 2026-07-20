@@ -395,6 +395,19 @@
     }
   }
 
+  &__upsell-group {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  &__upsell-group-title {
+    color: var(--admin-color-text-muted);
+    font-size: var(--text-xs);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
   &__upsell-list {
     display: grid;
     gap: var(--space-2);

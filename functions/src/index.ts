@@ -349,6 +349,21 @@ const reorderAdditionalsSchema = z
     }
   });
 
+const reorderCategoriesSchema = z
+  .object({
+    storeId: z.string().min(1),
+    categoryIds: z.array(z.string().trim().min(1)).min(1).max(500),
+  })
+  .superRefine((payload, context) => {
+    if (new Set(payload.categoryIds).size !== payload.categoryIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["categoryIds"],
+        message: "A lista de categorias não pode conter ids duplicados.",
+      });
+    }
+  });
+
 const deleteAdditionalSchema = z.object({
   storeId: z.string().min(1),
   additionalId: z.string().min(1),
@@ -1400,6 +1415,45 @@ export const reorderAdditionals = onCall(async (request) => {
       batch.update(additionalDocument.ref, {
         order: index + 1,
         updatedAt: now,
+      });
+    }
+  });
+
+  await batch.commit();
+  return { ok: true };
+});
+
+export const reorderCategories = onCall(async (request) => {
+  const payload = reorderCategoriesSchema.parse(request.data);
+  await assertStoreAdmin(payload.storeId, request.auth);
+
+  const collectionRef = db.collection(`stores/${payload.storeId}/categories`);
+  const snapshot = await collectionRef.get();
+  const categoryById = new Map(snapshot.docs.map((document) => [document.id, document]));
+  const unknownCategoryId = payload.categoryIds.find((categoryId) => !categoryById.has(categoryId));
+
+  if (unknownCategoryId) {
+    throw new HttpsError("not-found", `Categoria ${unknownCategoryId} não encontrada.`);
+  }
+
+  const requestedIds = new Set(payload.categoryIds);
+  const remainingIds = snapshot.docs
+    .filter((document) => !requestedIds.has(document.id))
+    .sort((first, second) => {
+      const firstOrder = Number(first.data().order || 0);
+      const secondOrder = Number(second.data().order || 0);
+      return firstOrder - secondOrder || String(first.data().name || "").localeCompare(String(second.data().name || ""));
+    })
+    .map((document) => document.id);
+  const orderedIds = [...payload.categoryIds, ...remainingIds];
+  const batch = db.batch();
+
+  orderedIds.forEach((categoryId, index) => {
+    const categoryDocument = categoryById.get(categoryId);
+
+    if (categoryDocument) {
+      batch.update(categoryDocument.ref, {
+        order: index + 1,
       });
     }
   });

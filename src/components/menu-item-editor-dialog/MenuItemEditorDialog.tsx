@@ -113,6 +113,24 @@ export function MenuItemEditorDialog({
     () => new Set(upsellCandidates.map((candidate) => candidate.id)),
     [upsellCandidates],
   );
+  const upsellGroups = useMemo(() => {
+    const groups = categories
+      .map((category) => ({
+        key: category.id,
+        name: category.name,
+        items: upsellCandidates.filter((candidate) => candidate.categoryId === category.id),
+      }))
+      .filter((group) => group.items.length > 0);
+
+    const groupedIds = new Set(groups.flatMap((group) => group.items.map((candidate) => candidate.id)));
+    const leftovers = upsellCandidates.filter((candidate) => !groupedIds.has(candidate.id));
+
+    if (leftovers.length) {
+      groups.push({ key: "__outros__", name: "Outros", items: leftovers });
+    }
+
+    return groups;
+  }, [categories, upsellCandidates]);
 
   const buildOptionsGroups = (): OptionGroup[] => {
     if (!hasAdditionals) {
@@ -576,35 +594,40 @@ export function MenuItemEditorDialog({
             {hasUpsell ? (
               upsellCandidates.length ? (
                 <>
-                  <div className="menu-item-editor-dialog__upsell-list">
-                    {upsellCandidates.map((candidate) => {
-                      const isSelected = selectedUpsellIds.includes(candidate.id);
+                  {upsellGroups.map((group) => (
+                    <div className="menu-item-editor-dialog__upsell-group" key={group.key}>
+                      <span className="menu-item-editor-dialog__upsell-group-title">{group.name}</span>
+                      <div className="menu-item-editor-dialog__upsell-list">
+                        {group.items.map((candidate) => {
+                          const isSelected = selectedUpsellIds.includes(candidate.id);
 
-                      return (
-                        <label
-                          className={`menu-item-editor-dialog__upsell-option${
-                            isSelected ? " menu-item-editor-dialog__upsell-option--selected" : ""
-                          }`}
-                          key={candidate.id}
-                        >
-                          <input
-                            className="menu-item-editor-dialog__upsell-checkbox"
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleUpsell(candidate.id)}
-                            disabled={isBusy || (!isSelected && selectedUpsellIds.length >= upsellLimit)}
-                          />
-                          <span className="menu-item-editor-dialog__upsell-copy">
-                            <strong className="menu-item-editor-dialog__upsell-name">{candidate.name}</strong>
-                            <small className="menu-item-editor-dialog__upsell-price">
-                              {formatPriceInput(getPriceDigits(candidate.price))}
-                              {candidate.isAvailable ? "" : " · indisponível"}
-                            </small>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                          return (
+                            <label
+                              className={`menu-item-editor-dialog__upsell-option${
+                                isSelected ? " menu-item-editor-dialog__upsell-option--selected" : ""
+                              }`}
+                              key={candidate.id}
+                            >
+                              <input
+                                className="menu-item-editor-dialog__upsell-checkbox"
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleUpsell(candidate.id)}
+                                disabled={isBusy || (!isSelected && selectedUpsellIds.length >= upsellLimit)}
+                              />
+                              <span className="menu-item-editor-dialog__upsell-copy">
+                                <strong className="menu-item-editor-dialog__upsell-name">{candidate.name}</strong>
+                                <small className="menu-item-editor-dialog__upsell-price">
+                                  {formatPriceInput(getPriceDigits(candidate.price))}
+                                  {candidate.isAvailable ? "" : " · indisponível"}
+                                </small>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                   {selectedUpsellIds.length >= upsellLimit ? (
                     <p className="menu-item-editor-dialog__hint">Você pode escolher até {upsellLimit} itens.</p>
                   ) : null}

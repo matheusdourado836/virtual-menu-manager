@@ -9,6 +9,7 @@ import { forwardRef, useImperativeHandle, useMemo, useState, type ForwardedRef }
 import { AdditionalEditorDialog } from "@/components/additional-editor-dialog/AdditionalEditorDialog";
 import { MenuItemEditorDialog } from "@/components/menu-item-editor-dialog/MenuItemEditorDialog";
 import { SortableAdditionalRow } from "@/components/menu-manager/sortable-additional-row/SortableAdditionalRow";
+import { SortableCategory } from "@/components/menu-manager/sortable-category/SortableCategory";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog/ConfirmDialog";
 import {
   createAdditional,
@@ -17,6 +18,7 @@ import {
   deleteAdditional,
   deleteMenuItem,
   reorderAdditionals,
+  reorderCategories,
   updateAdditional,
   updateMenuItem,
   type AdditionalInput,
@@ -99,19 +101,35 @@ function MenuManagerComponent(
   const [isMovingItems, setIsMovingItems] = useState(false);
   const [moveItemsError, setMoveItemsError] = useState("");
   const [failedItemImages, setFailedItemImages] = useState<Record<string, string>>({});
+  const [localCategoryOrderIds, setLocalCategoryOrderIds] = useState<string[]>([]);
+  const [isSavingCategoryOrder, setIsSavingCategoryOrder] = useState(false);
 
   const activeCategories = useMemo(() => categories.filter((category) => category.isActive), [categories]);
   const itemsMissingPhoto = useMemo(
     () => menuItems.filter((item) => !item.imageUrl || item.imageUrl.includes("placeholder-item")).length,
     [menuItems],
   );
+  const orderedActiveCategories = useMemo(() => {
+    if (!localCategoryOrderIds.length) {
+      return activeCategories;
+    }
+
+    const categoryById = new Map(activeCategories.map((category) => [category.id, category]));
+    const ordered = localCategoryOrderIds
+      .map((categoryId) => categoryById.get(categoryId))
+      .filter((category): category is Category => Boolean(category));
+    const orderedIds = new Set(ordered.map((category) => category.id));
+    const missing = activeCategories.filter((category) => !orderedIds.has(category.id));
+
+    return [...ordered, ...missing];
+  }, [activeCategories, localCategoryOrderIds]);
   const groupedItems = useMemo(
     () =>
-      activeCategories.map((category) => ({
+      orderedActiveCategories.map((category) => ({
         category,
         items: sortMenuEntries(menuItems.filter((item) => item.categoryId === category.id)),
       })),
-    [activeCategories, menuItems],
+    [orderedActiveCategories, menuItems],
   );
   const sortedAdditionals = useMemo(() => {
     if (!localAdditionalOrderIds.length) {
@@ -271,6 +289,48 @@ function MenuManagerComponent(
       onFeedback(error instanceof Error ? error.message : "Não foi possível salvar a ordem dos adicionais.", "error");
     } finally {
       setIsSavingAdditionalOrder(false);
+    }
+  };
+
+  const finishCategoryDrag = async (event: DragEndEvent) => {
+    if (event.canceled || isSavingCategoryOrder) {
+      return;
+    }
+
+    const { source } = event.operation;
+
+    if (!isSortable(source) || source.initialIndex === source.index) {
+      return;
+    }
+
+    if (
+      source.initialIndex < 0 ||
+      source.index < 0 ||
+      source.initialIndex >= orderedActiveCategories.length ||
+      source.index >= orderedActiveCategories.length
+    ) {
+      return;
+    }
+
+    const nextCategoryIds = arrayMove(
+      orderedActiveCategories.map((category) => category.id),
+      source.initialIndex,
+      source.index,
+    );
+
+    setLocalCategoryOrderIds(nextCategoryIds);
+    setIsSavingCategoryOrder(true);
+
+    try {
+      await reorderCategories(storeId, nextCategoryIds);
+      await onChanged();
+      setLocalCategoryOrderIds([]);
+      onFeedback("Ordem das categorias salva.");
+    } catch (error) {
+      setLocalCategoryOrderIds([]);
+      onFeedback(error instanceof Error ? error.message : "Não foi possível salvar a ordem das categorias.", "error");
+    } finally {
+      setIsSavingCategoryOrder(false);
     }
   };
 
@@ -450,15 +510,17 @@ function MenuManagerComponent(
             </p>
           ) : null}
 
-          <div className="menu-manager__categories">
-            {groupedItems.map(({ category, items }) => (
-              <section className="menu-manager__category" key={category.id}>
-                <div className="menu-manager__category-header">
-                  <span className="menu-manager__category-copy">
-                    <strong className="menu-manager__category-title">{category.name}</strong>
-                    <span className="menu-manager__category-count">{items.length} itens</span>
-                  </span>
-                  <span className="menu-manager__category-actions">
+          <DragDropProvider onDragEnd={finishCategoryDrag}>
+            <div className="menu-manager__categories">
+              {groupedItems.map(({ category, items }, categoryIndex) => (
+                <SortableCategory
+                  category={category}
+                  index={categoryIndex}
+                  itemCount={items.length}
+                  isBusy={isSavingCategoryOrder}
+                  key={category.id}
+                  actions={
+                    <>
                     <button
                       className="menu-manager__category-button"
                       type="button"
@@ -489,9 +551,10 @@ function MenuManagerComponent(
                         aria-hidden
                       />
                     </button>
-                  </span>
-                </div>
-                {!collapsedCategories[category.id] ? (
+                    </>
+                  }
+                >
+                  {!collapsedCategories[category.id] ? (
                   <div className="menu-manager__items">
                     {items.map((item) => {
                       const isSaving = savingItemId === item.id;
@@ -564,9 +627,10 @@ function MenuManagerComponent(
                     })}
                   </div>
                 ) : null}
-              </section>
-            ))}
-          </div>
+                </SortableCategory>
+              ))}
+            </div>
+          </DragDropProvider>
         </div>
       ) : null}
 
